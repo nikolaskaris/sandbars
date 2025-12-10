@@ -14,6 +14,7 @@ interface MapViewProps {
 
 export default function MapView({ favorites, onMapClick, selectedLocation }: MapViewProps) {
   const mapRef = useRef<any>(null);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [viewState, setViewState] = useState({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -23,9 +24,21 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
   const handleMapClick = useCallback(
     (event: any) => {
       const { lngLat } = event;
-      if (onMapClick) {
-        onMapClick(lngLat.lat, lngLat.lng);
+
+      // Clear any existing timeout
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+        return; // This is a double-click, ignore for adding favorite
       }
+
+      // Set a timeout for single click
+      clickTimeoutRef.current = setTimeout(() => {
+        if (onMapClick) {
+          onMapClick(lngLat.lat, lngLat.lng);
+        }
+        clickTimeoutRef.current = null;
+      }, 250);
     },
     [onMapClick]
   );
@@ -63,6 +76,7 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
       {...viewState}
       onMove={(evt) => setViewState(evt.viewState)}
       onClick={handleMapClick}
+      doubleClickZoom={true}
       mapStyle="mapbox://styles/mapbox/outdoors-v12"
       mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
       style={{ width: '100%', height: '100%' }}
