@@ -10,15 +10,16 @@ interface MapViewProps {
   favorites: FavoriteLocation[];
   onMapClick?: (lat: number, lng: number) => void;
   selectedLocation?: FavoriteLocation | null;
+  initialLocation?: { latitude: number; longitude: number; zoom?: number };
 }
 
-export default function MapView({ favorites, onMapClick, selectedLocation }: MapViewProps) {
+export default function MapView({ favorites, onMapClick, selectedLocation, initialLocation }: MapViewProps) {
   const mapRef = useRef<any>(null);
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [viewState, setViewState] = useState({
-    latitude: 37.7749,
-    longitude: -122.4194,
-    zoom: 9,
+    latitude: initialLocation?.latitude || 37.7749,
+    longitude: initialLocation?.longitude || -122.4194,
+    zoom: initialLocation?.zoom || 9,
   });
 
   const handleMapClick = useCallback(

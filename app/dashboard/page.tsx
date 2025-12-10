@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [initialMapLocation, setInitialMapLocation] = useState<{ latitude: number; longitude: number; zoom: number } | undefined>();
   const router = useRouter();
   const supabase = createClient();
 
@@ -37,6 +38,20 @@ export default function DashboardPage() {
       fetchForecast(selectedLocation.latitude, selectedLocation.longitude);
     }
   }, [selectedLocation]);
+
+  // Set initial map location when favorites load
+  useEffect(() => {
+    if (favorites.length > 0 && !initialMapLocation) {
+      const defaultLocationId = localStorage.getItem('defaultMapLocationId');
+      let defaultLocation = favorites.find(f => f.id === defaultLocationId) || favorites[0];
+
+      setInitialMapLocation({
+        latitude: defaultLocation.latitude,
+        longitude: defaultLocation.longitude,
+        zoom: 12,
+      });
+    }
+  }, [favorites, initialMapLocation]);
 
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -143,6 +158,7 @@ export default function DashboardPage() {
             favorites={favorites}
             onMapClick={handleMapClick}
             selectedLocation={selectedLocation}
+            initialLocation={initialMapLocation}
           />
         </div>
       </div>

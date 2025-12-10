@@ -20,6 +20,18 @@ interface LocationForecast {
 
 export default function FavoritesTable({ favorites, onDelete }: FavoritesTableProps) {
   const [locationForecasts, setLocationForecasts] = useState<LocationForecast[]>([]);
+  const [defaultLocationId, setDefaultLocationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load default location from localStorage
+    const storedDefaultId = localStorage.getItem('defaultMapLocationId');
+    setDefaultLocationId(storedDefaultId);
+  }, []);
+
+  const handleSetDefault = (locationId: string) => {
+    localStorage.setItem('defaultMapLocationId', locationId);
+    setDefaultLocationId(locationId);
+  };
 
   useEffect(() => {
     // Initialize location forecasts
@@ -176,25 +188,40 @@ export default function FavoritesTable({ favorites, onDelete }: FavoritesTablePr
                 {renderForecastCell(item.forecasts.dayAfter, item.loading)}
               </td>
               <td className="px-6 py-4 text-right">
-                <button
-                  onClick={() => onDelete(item.location.id)}
-                  className="text-red-600 hover:text-red-800 p-2"
-                  title="Delete location"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="flex items-center justify-end space-x-2">
+                  {defaultLocationId === item.location.id ? (
+                    <span className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
+                      Map Default
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleSetDefault(item.location.id)}
+                      className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                      title="Set as map default"
+                    >
+                      Set as Default
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onDelete(item.location.id)}
+                    className="text-red-600 hover:text-red-800 p-2"
+                    title="Delete location"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
