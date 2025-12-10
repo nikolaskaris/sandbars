@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { FavoriteLocation } from '@/types';
@@ -13,11 +13,41 @@ interface MapViewProps {
 
 export default function MapView({ favorites, onMapClick, selectedLocation }: MapViewProps) {
   const mapRef = useRef<any>(null);
-  const [viewState, setViewState] = useState({
-    latitude: 37.7749,
-    longitude: -122.4194,
-    zoom: 9,
-  });
+
+  // Calculate initial viewport based on default or first favorite location
+  const getInitialViewState = () => {
+    const defaultLocation = favorites.find(f => f.is_default);
+    const initialLocation = defaultLocation || favorites[0];
+
+    if (initialLocation) {
+      return {
+        latitude: initialLocation.latitude,
+        longitude: initialLocation.longitude,
+        zoom: 12,
+      };
+    }
+
+    // Fallback to San Francisco if no favorites
+    return {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      zoom: 9,
+    };
+  };
+
+  const [viewState, setViewState] = useState(getInitialViewState());
+
+  // Update view when favorites change (e.g., when a default is set)
+  useEffect(() => {
+    const defaultLocation = favorites.find(f => f.is_default);
+    if (defaultLocation && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [defaultLocation.longitude, defaultLocation.latitude],
+        zoom: 12,
+        duration: 2000,
+      });
+    }
+  }, [favorites.find(f => f.is_default)?.id]);
 
   const handleMapClick = useCallback(
     (event: any) => {

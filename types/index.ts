@@ -10,6 +10,7 @@ export interface FavoriteLocation {
   name: string;
   latitude: number;
   longitude: number;
+  is_default: boolean;
   created_at: string;
 }
 

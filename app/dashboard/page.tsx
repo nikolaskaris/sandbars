@@ -38,6 +38,16 @@ export default function DashboardPage() {
     }
   }, [selectedLocation]);
 
+  // Auto-select default location when favorites are loaded
+  useEffect(() => {
+    if (favorites.length > 0 && !selectedLocation) {
+      const defaultLocation = favorites.find(f => f.is_default);
+      if (defaultLocation) {
+        setSelectedLocation(defaultLocation);
+      }
+    }
+  }, [favorites, selectedLocation]);
+
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -105,6 +115,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSetDefault = async (id: string) => {
+    const response = await fetch(`/api/favorites/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ is_default: true }),
+    });
+
+    if (response.ok) {
+      await fetchFavorites();
+    }
+  };
+
   const handleSelectLocation = (favorite: FavoriteLocation) => {
     setSelectedLocation(favorite);
   };
@@ -123,6 +147,7 @@ export default function DashboardPage() {
               selectedId={selectedLocation?.id || null}
               onSelect={handleSelectLocation}
               onDelete={handleDeleteLocation}
+              onSetDefault={handleSetDefault}
             />
           </div>
 
