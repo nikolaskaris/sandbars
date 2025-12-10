@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { FavoriteLocation } from '@/types';
@@ -35,7 +35,7 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
       mapRef.current.flyTo({
         center: [lng, lat],
         zoom: 12,
-        duration: 2000,
+        duration: 500, // Fast animation (0.5 seconds)
       });
     }
   }, []);
@@ -45,9 +45,11 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
   }, [flyToLocation]);
 
   // Fly to selected location when it changes
-  if (selectedLocation && mapRef.current) {
-    flyToLocation(selectedLocation.latitude, selectedLocation.longitude);
-  }
+  useEffect(() => {
+    if (selectedLocation) {
+      flyToLocation(selectedLocation.latitude, selectedLocation.longitude);
+    }
+  }, [selectedLocation, flyToLocation]);
 
   return (
     <div className="relative w-full h-full">

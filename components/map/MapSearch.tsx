@@ -77,7 +77,7 @@ export default function MapSearch({ onSelect }: MapSearchProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a location..."
-          className="w-full px-4 py-3 pr-10 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-4 py-3 pr-10 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
         />
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
           {loading ? (

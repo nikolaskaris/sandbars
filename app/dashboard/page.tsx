@@ -117,7 +117,7 @@ export default function DashboardPage() {
         {/* Sidebar */}
         <div className="w-96 bg-gray-50 border-r border-gray-200 overflow-y-auto">
           <div className="p-6">
-            <h2 className="text-xl font-bold mb-4">Favorite Locations</h2>
+            <h2 className="text-xl font-bold mb-4 text-gray-900">Favorite Locations</h2>
             <FavoritesList
               favorites={favorites}
               selectedId={selectedLocation?.id || null}
