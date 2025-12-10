@@ -4,6 +4,7 @@ import { useRef, useState, useCallback } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { FavoriteLocation } from '@/types';
+import MapSearch from './MapSearch';
 
 interface MapViewProps {
   favorites: FavoriteLocation[];
@@ -39,13 +40,23 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
     }
   }, []);
 
+  const handleSearchSelect = useCallback((lng: number, lat: number, placeName: string) => {
+    flyToLocation(lat, lng);
+  }, [flyToLocation]);
+
   // Fly to selected location when it changes
   if (selectedLocation && mapRef.current) {
     flyToLocation(selectedLocation.latitude, selectedLocation.longitude);
   }
 
   return (
-    <Map
+    <div className="relative w-full h-full">
+      {/* Search Bar Overlay */}
+      <div className="absolute top-4 left-4 z-10">
+        <MapSearch onSelect={handleSearchSelect} />
+      </div>
+
+      <Map
       ref={mapRef}
       {...viewState}
       onMove={(evt) => setViewState(evt.viewState)}
@@ -88,5 +99,6 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
         </Marker>
       ))}
     </Map>
+    </div>
   );
 }
