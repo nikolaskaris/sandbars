@@ -1,30 +1,45 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { FavoriteLocation } from '@/types';
+import MapSearch from './MapSearch';
 
 interface MapViewProps {
   favorites: FavoriteLocation[];
   onMapClick?: (lat: number, lng: number) => void;
   selectedLocation?: FavoriteLocation | null;
+  initialLocation?: { latitude: number; longitude: number; zoom?: number };
 }
 
-export default function MapView({ favorites, onMapClick, selectedLocation }: MapViewProps) {
+export default function MapView({ favorites, onMapClick, selectedLocation, initialLocation }: MapViewProps) {
   const mapRef = useRef<any>(null);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [viewState, setViewState] = useState({
-    latitude: 37.7749,
-    longitude: -122.4194,
-    zoom: 9,
+    latitude: initialLocation?.latitude || 37.7749,
+    longitude: initialLocation?.longitude || -122.4194,
+    zoom: initialLocation?.zoom || 9,
   });
 
   const handleMapClick = useCallback(
     (event: any) => {
       const { lngLat } = event;
-      if (onMapClick) {
-        onMapClick(lngLat.lat, lngLat.lng);
+
+      // Clear any existing timeout
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+        return; // This is a double-click, ignore for adding favorite
       }
+
+      // Set a timeout for single click
+      clickTimeoutRef.current = setTimeout(() => {
+        if (onMapClick) {
+          onMapClick(lngLat.lat, lngLat.lng);
+        }
+        clickTimeoutRef.current = null;
+      }, 250);
     },
     [onMapClick]
   );
@@ -34,22 +49,35 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
       mapRef.current.flyTo({
         center: [lng, lat],
         zoom: 12,
-        duration: 2000,
+        duration: 500, // Fast animation (0.5 seconds)
       });
     }
   }, []);
 
+  const handleSearchSelect = useCallback((lng: number, lat: number, placeName: string) => {
+    flyToLocation(lat, lng);
+  }, [flyToLocation]);
+
   // Fly to selected location when it changes
-  if (selectedLocation && mapRef.current) {
-    flyToLocation(selectedLocation.latitude, selectedLocation.longitude);
-  }
+  useEffect(() => {
+    if (selectedLocation) {
+      flyToLocation(selectedLocation.latitude, selectedLocation.longitude);
+    }
+  }, [selectedLocation, flyToLocation]);
 
   return (
-    <Map
+    <div className="relative w-full h-full">
+      {/* Search Bar Overlay */}
+      <div className="absolute top-4 left-4 z-10">
+        <MapSearch onSelect={handleSearchSelect} />
+      </div>
+
+      <Map
       ref={mapRef}
       {...viewState}
       onMove={(evt) => setViewState(evt.viewState)}
       onClick={handleMapClick}
+      doubleClickZoom={true}
       mapStyle="mapbox://styles/mapbox/outdoors-v12"
       mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
       style={{ width: '100%', height: '100%' }}
@@ -88,5 +116,6 @@ export default function MapView({ favorites, onMapClick, selectedLocation }: Map
         </Marker>
       ))}
     </Map>
+    </div>
   );
 }

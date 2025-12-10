@@ -39,11 +39,11 @@ export default function AddLocationModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h2 className="text-2xl font-bold mb-4">Add Favorite Location</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-900">Add Favorite Location</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2 text-gray-900">
               Location Name
             </label>
             <input
@@ -69,7 +69,7 @@ export default function AddLocationModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-gray-900"
             >
               Cancel
             </button>

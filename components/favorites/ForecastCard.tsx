@@ -47,8 +47,8 @@ export default function ForecastCard({ forecast, locationName, loading }: Foreca
   return (
     <div className="bg-white rounded-lg shadow">
       <div className="p-6 border-b">
-        <h2 className="text-2xl font-bold">Surf Forecast</h2>
-        <p className="text-gray-600">{locationName}</p>
+        <h2 className="text-2xl font-bold text-gray-900">Surf Forecast</h2>
+        <p className="text-gray-900">{locationName}</p>
       </div>
 
       <div className="p-6 space-y-4 max-h-96 overflow-y-auto">
@@ -58,31 +58,31 @@ export default function ForecastCard({ forecast, locationName, loading }: Foreca
             className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
           >
             <div className="flex-1">
-              <p className="font-medium">{formatTime(item.time)}</p>
+              <p className="font-medium text-gray-900">{formatTime(item.time)}</p>
             </div>
 
             <div className="flex items-center space-x-6 text-sm">
               <div className="text-center">
-                <p className="text-gray-500 text-xs mb-1">Wave Height</p>
+                <p className="text-gray-900 text-xs mb-1">Wave Height</p>
                 <p className={`font-bold text-lg ${getWaveHeightColor(item.waveHeight.max)}`}>
                   {item.waveHeight.min.toFixed(1)}-{item.waveHeight.max.toFixed(1)}m
                 </p>
               </div>
 
               <div className="text-center">
-                <p className="text-gray-500 text-xs mb-1">Period</p>
-                <p className="font-medium">{item.wavePeriod.toFixed(0)}s</p>
+                <p className="text-gray-900 text-xs mb-1">Period</p>
+                <p className="font-medium text-gray-900">{item.wavePeriod.toFixed(0)}s</p>
               </div>
 
               <div className="text-center">
-                <p className="text-gray-500 text-xs mb-1">Wind</p>
-                <p className="font-medium">{item.windSpeed.toFixed(1)} m/s</p>
+                <p className="text-gray-900 text-xs mb-1">Wind</p>
+                <p className="font-medium text-gray-900">{item.windSpeed.toFixed(1)} m/s</p>
               </div>
 
               {item.waterTemperature && (
                 <div className="text-center">
-                  <p className="text-gray-500 text-xs mb-1">Water</p>
-                  <p className="font-medium">{item.waterTemperature.toFixed(1)}°C</p>
+                  <p className="text-gray-900 text-xs mb-1">Water</p>
+                  <p className="font-medium text-gray-900">{item.waterTemperature.toFixed(1)}°C</p>
                 </div>
               )}
             </div>
