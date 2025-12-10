@@ -1,0 +1,11 @@
+{
+  "version": 4,
+  "routes": {},
+  "dynamicRoutes": {},
+  "notFoundRoutes": [],
+  "preview": {
+    "previewModeId": "8ace02f2dce8b62007bd0c45b3ee1de4",
+    "previewModeSigningKey": "af5f4000ac45b75e2c858f074caf2788a27ab349142c8ddff60db339225ee8e3",
+    "previewModeEncryptionKey": "f57bc2d359f10a62483d06f02fa1fba7727d79e65020b89f200c571dd091f5da"
+  }
+}

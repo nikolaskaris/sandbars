@@ -35,8 +35,8 @@ export default function FavoritesList({
           >
             <div className="flex justify-between items-start">
               <div className="flex-1">
-                <h3 className="font-medium text-lg">{favorite.name}</h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <h3 className="font-medium text-lg text-gray-900">{favorite.name}</h3>
+                <p className="text-sm text-gray-900 mt-1">
                   {favorite.latitude.toFixed(4)}, {favorite.longitude.toFixed(4)}
                 </p>
               </div>
