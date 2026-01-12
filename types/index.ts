@@ -25,25 +25,3 @@ export interface SurfForecast {
   windDirection: number;
   waterTemperature?: number;
 }
-
-export interface StormglassResponse {
-  hours: Array<{
-    time: string;
-    waveHeight: { noaa: number; sg: number; icon: number };
-    wavePeriod: { noaa: number; sg: number; icon: number };
-    waveDirection: { noaa: number; sg: number; icon: number };
-    windSpeed: { noaa: number; sg: number; icon: number };
-    windDirection: { noaa: number; sg: number; icon: number };
-    waterTemperature?: { noaa: number; sg: number; icon: number };
-  }>;
-  meta: {
-    cost: number;
-    dailyQuota: number;
-    end: string;
-    lat: number;
-    lng: number;
-    params: string[];
-    requestCount: number;
-    start: string;
-  };
-}

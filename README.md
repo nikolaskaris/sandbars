@@ -7,11 +7,12 @@ Customizable surf forecasting for your favorite spots
 - **User Authentication**: Secure login and signup with Supabase Auth
 - **Interactive Map**: Explore locations and select surf spots using Mapbox
 - **Favorite Locations**: Save and manage your favorite surf spots
-- **Surf Forecasts**: Get detailed surf forecasts powered by Stormglass API
-  - Wave height and period
-  - Wind speed and direction
+- **Surf Forecasts**: Get detailed surf forecasts powered by NOAA (free)
+  - Wave height and period from NDBC buoys
+  - Wind speed and direction from NWS forecasts
   - Water temperature
-  - 24-hour forecast view
+  - 72-hour forecast view
+  - No API key required!
 
 ## Tech Stack
 
@@ -20,7 +21,7 @@ Customizable surf forecasting for your favorite spots
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
 - **Mapping**: Mapbox GL JS
-- **Weather Data**: Stormglass API
+- **Weather Data**: NOAA (NDBC buoys + NWS forecasts) - Free!
 - **Deployment**: Vercel
 
 ## Getting Started
@@ -31,7 +32,7 @@ Customizable surf forecasting for your favorite spots
 - Accounts for:
   - [Supabase](https://supabase.com)
   - [Mapbox](https://www.mapbox.com)
-  - [Stormglass](https://stormglass.io)
+  - No weather API key needed (uses free NOAA data)
 
 ### 1. Clone the Repository
 
@@ -65,11 +66,6 @@ npm install
 - Create an account at [mapbox.com](https://account.mapbox.com)
 - Generate a new access token from your [account page](https://account.mapbox.com/access-tokens/)
 
-#### Stormglass
-- Sign up at [stormglass.io](https://stormglass.io)
-- Get your API key from the dashboard
-- Note: Free tier includes 50 API calls per day
-
 ### 5. Configure Environment Variables
 
 Create a `.env.local` file in the root directory:
@@ -84,8 +80,9 @@ Edit `.env.local` and fill in your credentials:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
-STORMGLASS_API_KEY=your_stormglass_api_key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Note: Surf forecasts use free NOAA APIs (no key required)
 ```
 
 ### 6. Run the Development Server
@@ -181,7 +178,7 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
 
-- Weather data provided by [Stormglass](https://stormglass.io)
+- Weather data provided by [NOAA](https://www.noaa.gov/) (NDBC buoys & NWS forecasts)
 - Maps powered by [Mapbox](https://www.mapbox.com)
 - Backend infrastructure by [Supabase](https://supabase.com)
 - Deployed on [Vercel](https://vercel.com)
