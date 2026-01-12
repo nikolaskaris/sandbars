@@ -258,6 +258,23 @@ function MapView(param) {
     }["MapView.useCallback[handleSearchSelect]"], [
         flyToLocation
     ]);
+    // Update map location when initialLocation prop changes
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "MapView.useEffect": ()=>{
+            if (initialLocation && mapRef.current) {
+                mapRef.current.flyTo({
+                    center: [
+                        initialLocation.longitude,
+                        initialLocation.latitude
+                    ],
+                    zoom: initialLocation.zoom || 12,
+                    duration: 1000
+                });
+            }
+        }
+    }["MapView.useEffect"], [
+        initialLocation
+    ]);
     // Fly to selected location when it changes
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "MapView.useEffect": ()=>{
@@ -278,12 +295,12 @@ function MapView(param) {
                     onSelect: handleSearchSelect
                 }, void 0, false, {
                     fileName: "[project]/components/map/MapView.tsx",
-                    lineNumber: 72,
+                    lineNumber: 83,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/components/map/MapView.tsx",
-                lineNumber: 71,
+                lineNumber: 82,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$map$2d$gl$2f$dist$2f$esm$2f$exports$2d$mapbox$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["default"], {
@@ -303,7 +320,7 @@ function MapView(param) {
                         position: "top-right"
                     }, void 0, false, {
                         fileName: "[project]/components/map/MapView.tsx",
-                        lineNumber: 85,
+                        lineNumber: 96,
                         columnNumber: 7
                     }, this),
                     favorites.map((favorite)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$map$2d$gl$2f$dist$2f$esm$2f$exports$2d$mapbox$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Marker"], {
@@ -325,43 +342,43 @@ function MapView(param) {
                                             clipRule: "evenodd"
                                         }, void 0, false, {
                                             fileName: "[project]/components/map/MapView.tsx",
-                                            lineNumber: 108,
+                                            lineNumber: 119,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/components/map/MapView.tsx",
-                                        lineNumber: 103,
+                                        lineNumber: 114,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/components/map/MapView.tsx",
-                                    lineNumber: 95,
+                                    lineNumber: 106,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/components/map/MapView.tsx",
-                                lineNumber: 94,
+                                lineNumber: 105,
                                 columnNumber: 11
                             }, this)
                         }, favorite.id, false, {
                             fileName: "[project]/components/map/MapView.tsx",
-                            lineNumber: 88,
+                            lineNumber: 99,
                             columnNumber: 9
                         }, this))
                 ]
             }, void 0, true, {
                 fileName: "[project]/components/map/MapView.tsx",
-                lineNumber: 75,
+                lineNumber: 86,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/components/map/MapView.tsx",
-        lineNumber: 69,
+        lineNumber: 80,
         columnNumber: 5
     }, this);
 }
-_s(MapView, "ey/btCuCT6xXbtA3PWCCFwdD15c=");
+_s(MapView, "wXJEuD9c6UrBfKZqAWG/HF8BEpc=");
 _c = MapView;
 var _c;
 __turbopack_context__.k.register(_c, "MapView");
