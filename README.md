@@ -131,7 +131,7 @@ sandbars/
 ├── lib/                      # Utility libraries
 │   ├── supabase/             # Supabase client configs
 │   ├── database.types.ts     # Database types
-│   └── stormglass.ts         # Stormglass API integration
+│   └── noaa.ts               # NOAA API integration (buoys + NWS)
 ├── types/                    # TypeScript type definitions
 ├── supabase/                 # Supabase schema and docs
 └── public/                   # Static assets
