@@ -224,8 +224,8 @@ export async function getSurfForecast(
     const baseWavePeriod = buoyData.dominantWavePeriod || buoyData.averageWavePeriod || 10;
     const baseWaveDirection = parseInt(buoyData.waveDirection || '270');
 
-    // Create forecasts for next 72 hours
-    for (let i = 0; i < Math.min(nwsForecast.length, 72); i++) {
+    // Create forecasts for next 7 days (168 hours)
+    for (let i = 0; i < Math.min(nwsForecast.length, 168); i++) {
       const period = nwsForecast[i];
 
       // Parse wind from NWS
@@ -249,10 +249,10 @@ export async function getSurfForecast(
       });
     }
 
-    // If we don't have NWS data but have buoy data, create a basic forecast
+    // If we don't have NWS data but have buoy data, create a basic 7-day forecast
     if (forecasts.length === 0 && buoyId) {
       const now = new Date();
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < 168; i++) {
         const time = new Date(now.getTime() + i * 3600000);
         forecasts.push({
           time: time.toISOString(),
