@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { getSurfForecast } from '@/lib/stormglass';
+import { getSurfForecast } from '@/lib/noaa';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
