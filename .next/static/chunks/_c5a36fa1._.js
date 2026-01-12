@@ -165,6 +165,7 @@ function FavoritesTable(param) {
     _s();
     const [locationForecasts, setLocationForecasts] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [defaultLocationId, setDefaultLocationId] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [expandedLocationId, setExpandedLocationId] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "FavoritesTable.useEffect": ()=>{
             // Load default location from localStorage
@@ -176,17 +177,17 @@ function FavoritesTable(param) {
         localStorage.setItem('defaultMapLocationId', locationId);
         setDefaultLocationId(locationId);
     };
+    const toggleExpanded = (locationId)=>{
+        setExpandedLocationId(expandedLocationId === locationId ? null : locationId);
+    };
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "FavoritesTable.useEffect": ()=>{
             // Initialize location forecasts
             const initialForecasts = favorites.map({
                 "FavoritesTable.useEffect.initialForecasts": (location)=>({
                         location,
-                        forecasts: {
-                            today: null,
-                            tomorrow: null,
-                            dayAfter: null
-                        },
+                        fullForecast: [],
+                        sevenDayForecasts: Array(7).fill(null),
                         loading: true
                     })
             }["FavoritesTable.useEffect.initialForecasts"]);
@@ -198,36 +199,19 @@ function FavoritesTable(param) {
                         const response = await fetch("/api/forecast?lat=".concat(location.latitude, "&lng=").concat(location.longitude));
                         if (response.ok) {
                             const data = await response.json();
-                            // Get today, tomorrow, and day after forecasts (at noon)
-                            const today = new Date();
-                            const tomorrow = new Date(today);
-                            tomorrow.setDate(tomorrow.getDate() + 1);
-                            const dayAfter = new Date(today);
-                            dayAfter.setDate(dayAfter.getDate() + 2);
-                            const getTodayForecast = {
-                                "FavoritesTable.useEffect.getTodayForecast": (forecasts)=>{
-                                    const todayStr = today.toISOString().split('T')[0];
-                                    return forecasts.find({
-                                        "FavoritesTable.useEffect.getTodayForecast": (f)=>f.time.includes(todayStr) && f.time.includes('12:00')
-                                    }["FavoritesTable.useEffect.getTodayForecast"]) || forecasts[0];
-                                }
-                            }["FavoritesTable.useEffect.getTodayForecast"];
-                            const getTomorrowForecast = {
-                                "FavoritesTable.useEffect.getTomorrowForecast": (forecasts)=>{
-                                    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-                                    return forecasts.find({
-                                        "FavoritesTable.useEffect.getTomorrowForecast": (f)=>f.time.includes(tomorrowStr) && f.time.includes('12:00')
-                                    }["FavoritesTable.useEffect.getTomorrowForecast"]) || null;
-                                }
-                            }["FavoritesTable.useEffect.getTomorrowForecast"];
-                            const getDayAfterForecast = {
-                                "FavoritesTable.useEffect.getDayAfterForecast": (forecasts)=>{
-                                    const dayAfterStr = dayAfter.toISOString().split('T')[0];
-                                    return forecasts.find({
-                                        "FavoritesTable.useEffect.getDayAfterForecast": (f)=>f.time.includes(dayAfterStr) && f.time.includes('12:00')
-                                    }["FavoritesTable.useEffect.getDayAfterForecast"]) || null;
-                                }
-                            }["FavoritesTable.useEffect.getDayAfterForecast"];
+                            // Get forecasts for next 7 days (at noon)
+                            const sevenDayForecasts = [];
+                            for(let i = 0; i < 7; i++){
+                                const targetDate = new Date();
+                                targetDate.setDate(targetDate.getDate() + i);
+                                const targetDateStr = targetDate.toISOString().split('T')[0];
+                                const dayForecast = data.find({
+                                    "FavoritesTable.useEffect": (f)=>f.time.includes(targetDateStr) && f.time.includes('12:00')
+                                }["FavoritesTable.useEffect"]) || data.find({
+                                    "FavoritesTable.useEffect": (f)=>f.time.includes(targetDateStr)
+                                }["FavoritesTable.useEffect"]) || null;
+                                sevenDayForecasts.push(dayForecast);
+                            }
                             setLocationForecasts({
                                 "FavoritesTable.useEffect": (prev)=>{
                                     const updated = [
@@ -235,11 +219,8 @@ function FavoritesTable(param) {
                                     ];
                                     updated[index] = {
                                         location,
-                                        forecasts: {
-                                            today: getTodayForecast(data),
-                                            tomorrow: getTomorrowForecast(data),
-                                            dayAfter: getDayAfterForecast(data)
-                                        },
+                                        fullForecast: data,
+                                        sevenDayForecasts,
                                         loading: false
                                     };
                                     return updated;
@@ -271,6 +252,15 @@ function FavoritesTable(param) {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
+        });
+    };
+    const formatDayName = (daysFromNow)=>{
+        if (daysFromNow === 0) return 'Today';
+        if (daysFromNow === 1) return 'Tomorrow';
+        const date = new Date();
+        date.setDate(date.getDate() + daysFromNow);
+        return date.toLocaleDateString('en-US', {
+            weekday: 'short'
         });
     };
     const renderForecastCell = (forecast, loading)=>{
@@ -343,6 +333,246 @@ function FavoritesTable(param) {
             columnNumber: 7
         }, this);
     };
+    const renderExpandedRow = (item)=>{
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+            className: "bg-gray-50",
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                colSpan: 10,
+                className: "px-6 py-4",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "space-y-4",
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                            className: "font-semibold text-gray-900",
+                            children: "Detailed 7-Day Forecast"
+                        }, void 0, false, {
+                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                            lineNumber: 145,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "overflow-x-auto",
+                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
+                                className: "w-full text-sm",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
+                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                            className: "border-b border-gray-300",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "text-left py-2 px-3 text-gray-700 font-medium",
+                                                    children: "Metric"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                    lineNumber: 151,
+                                                    columnNumber: 21
+                                                }, this),
+                                                item.sevenDayForecasts.map((_, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                        className: "text-center py-2 px-3 text-gray-700 font-medium",
+                                                        children: formatDayName(idx)
+                                                    }, idx, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 153,
+                                                        columnNumber: 23
+                                                    }, this))
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                            lineNumber: 150,
+                                            columnNumber: 19
+                                        }, this)
+                                    }, void 0, false, {
+                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                        lineNumber: 149,
+                                        columnNumber: 17
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
+                                        className: "text-gray-900",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "border-b border-gray-200",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Water Temp"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 161,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: (forecast === null || forecast === void 0 ? void 0 : forecast.waterTemperature) ? "".concat(forecast.waterTemperature.toFixed(1), "°C") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 163,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 160,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "border-b border-gray-200 bg-white",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Wind Speed"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 169,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: forecast ? "".concat(forecast.windSpeed.toFixed(1), " m/s") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 171,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 168,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "border-b border-gray-200",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Wind Direction"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 177,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: forecast ? "".concat(forecast.windDirection, "°") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 179,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 176,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "border-b border-gray-200 bg-white",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Swell Size"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 185,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: forecast ? "".concat(forecast.waveHeight.min.toFixed(1), "-").concat(forecast.waveHeight.max.toFixed(1), "m") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 187,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 184,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "border-b border-gray-200",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Swell Direction"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 193,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: forecast ? "".concat(forecast.waveDirection, "°") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 195,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 192,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                className: "bg-white",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                        className: "py-2 px-3 font-medium",
+                                                        children: "Swell Period"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 201,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "text-center py-2 px-3",
+                                                            children: forecast ? "".concat(forecast.wavePeriod.toFixed(0), "s") : '-'
+                                                        }, idx, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 203,
+                                                            columnNumber: 23
+                                                        }, this))
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                lineNumber: 200,
+                                                columnNumber: 19
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                        lineNumber: 159,
+                                        columnNumber: 17
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                lineNumber: 148,
+                                columnNumber: 15
+                            }, this)
+                        }, void 0, false, {
+                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                            lineNumber: 147,
+                            columnNumber: 13
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                    lineNumber: 144,
+                    columnNumber: 11
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                lineNumber: 143,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+            lineNumber: 142,
+            columnNumber: 7
+        }, this);
+    };
     if (favorites.length === 0) {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             className: "text-center py-12",
@@ -352,7 +582,7 @@ function FavoritesTable(param) {
                     children: "No favorite locations yet"
                 }, void 0, false, {
                     fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                    lineNumber: 143,
+                    lineNumber: 220,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -360,13 +590,13 @@ function FavoritesTable(param) {
                     children: "Add some spots from the Map view to see forecasts here"
                 }, void 0, false, {
                     fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                    lineNumber: 144,
+                    lineNumber: 221,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/favorites/FavoritesTable.tsx",
-            lineNumber: 142,
+            lineNumber: 219,
             columnNumber: 7
         }, this);
     }
@@ -384,246 +614,222 @@ function FavoritesTable(param) {
                                 children: "Location"
                             }, void 0, false, {
                                 fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                lineNumber: 154,
+                                lineNumber: 231,
                                 columnNumber: 13
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                className: "px-6 py-4 text-center text-sm font-semibold text-gray-900",
-                                children: [
-                                    "Today",
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("br", {}, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 156,
-                                        columnNumber: 20
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-normal text-xs text-gray-600",
-                                        children: formatDate(0)
-                                    }, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 157,
-                                        columnNumber: 15
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                lineNumber: 155,
-                                columnNumber: 13
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                className: "px-6 py-4 text-center text-sm font-semibold text-gray-900",
-                                children: [
-                                    "Tomorrow",
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("br", {}, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 160,
-                                        columnNumber: 23
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-normal text-xs text-gray-600",
-                                        children: formatDate(1)
-                                    }, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 161,
-                                        columnNumber: 15
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                lineNumber: 159,
-                                columnNumber: 13
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                className: "px-6 py-4 text-center text-sm font-semibold text-gray-900",
-                                children: [
-                                    formatDate(2).split(',')[0],
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("br", {}, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 164,
-                                        columnNumber: 44
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "font-normal text-xs text-gray-600",
-                                        children: formatDate(2)
-                                    }, void 0, false, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 165,
-                                        columnNumber: 15
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                lineNumber: 163,
-                                columnNumber: 13
-                            }, this),
+                            [
+                                ...Array(7)
+                            ].map((_, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                    className: "px-6 py-4 text-center text-sm font-semibold text-gray-900",
+                                    children: [
+                                        formatDayName(idx),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("br", {}, void 0, false, {
+                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                            lineNumber: 234,
+                                            columnNumber: 37
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            className: "font-normal text-xs text-gray-600",
+                                            children: formatDate(idx)
+                                        }, void 0, false, {
+                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                            lineNumber: 235,
+                                            columnNumber: 17
+                                        }, this)
+                                    ]
+                                }, idx, true, {
+                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                    lineNumber: 233,
+                                    columnNumber: 15
+                                }, this)),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 className: "px-6 py-4 text-right text-sm font-semibold text-gray-900",
                                 children: "Actions"
                             }, void 0, false, {
                                 fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                lineNumber: 167,
+                                lineNumber: 238,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                        lineNumber: 153,
+                        lineNumber: 230,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                    lineNumber: 152,
+                    lineNumber: 229,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
-                    children: locationForecasts.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                            className: "border-b border-gray-200 hover:bg-gray-50",
+                    children: locationForecasts.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
                             children: [
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                    className: "px-6 py-4",
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                className: "font-medium text-gray-900",
-                                                children: item.location.name
-                                            }, void 0, false, {
-                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                lineNumber: 175,
-                                                columnNumber: 19
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                className: "text-sm text-gray-600",
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                    className: "border-b border-gray-200 hover:bg-gray-50 cursor-pointer ".concat(expandedLocationId === item.location.id ? 'bg-blue-50' : ''),
+                                    onClick: ()=>toggleExpanded(item.location.id),
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                            className: "px-6 py-4",
+                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "flex items-center space-x-2",
                                                 children: [
-                                                    item.location.latitude.toFixed(4),
-                                                    ", ",
-                                                    item.location.longitude.toFixed(4)
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                                        className: "w-4 h-4 text-gray-600 transition-transform ".concat(expandedLocationId === item.location.id ? 'rotate-90' : ''),
+                                                        fill: "none",
+                                                        stroke: "currentColor",
+                                                        viewBox: "0 0 24 24",
+                                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                                                            strokeLinecap: "round",
+                                                            strokeLinejoin: "round",
+                                                            strokeWidth: 2,
+                                                            d: "M9 5l7 7-7 7"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 261,
+                                                            columnNumber: 23
+                                                        }, this)
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 253,
+                                                        columnNumber: 21
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                className: "font-medium text-gray-900",
+                                                                children: item.location.name
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                                lineNumber: 269,
+                                                                columnNumber: 23
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                className: "text-sm text-gray-600",
+                                                                children: [
+                                                                    item.location.latitude.toFixed(4),
+                                                                    ", ",
+                                                                    item.location.longitude.toFixed(4)
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                                lineNumber: 270,
+                                                                columnNumber: 23
+                                                            }, this)
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 268,
+                                                        columnNumber: 21
+                                                    }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                lineNumber: 176,
+                                                lineNumber: 252,
                                                 columnNumber: 19
                                             }, this)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 174,
-                                        columnNumber: 17
-                                    }, this)
-                                }, void 0, false, {
-                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                    lineNumber: 173,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                    className: "px-6 py-4",
-                                    children: renderForecastCell(item.forecasts.today, item.loading)
-                                }, void 0, false, {
-                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                    lineNumber: 181,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                    className: "px-6 py-4",
-                                    children: renderForecastCell(item.forecasts.tomorrow, item.loading)
-                                }, void 0, false, {
-                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                    lineNumber: 184,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                    className: "px-6 py-4",
-                                    children: renderForecastCell(item.forecasts.dayAfter, item.loading)
-                                }, void 0, false, {
-                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                    lineNumber: 187,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                    className: "px-6 py-4 text-right",
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "flex items-center justify-end space-x-2",
-                                        children: [
-                                            defaultLocationId === item.location.id ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                className: "px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full",
-                                                children: "Map Default"
-                                            }, void 0, false, {
+                                        }, void 0, false, {
+                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                            lineNumber: 251,
+                                            columnNumber: 17
+                                        }, this),
+                                        item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                className: "px-6 py-4",
+                                                children: renderForecastCell(forecast, item.loading)
+                                            }, idx, false, {
                                                 fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                lineNumber: 193,
-                                                columnNumber: 21
-                                            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                                onClick: ()=>handleSetDefault(item.location.id),
-                                                className: "px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors",
-                                                title: "Set as map default",
-                                                children: "Set as Default"
-                                            }, void 0, false, {
-                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                lineNumber: 197,
-                                                columnNumber: 21
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                                onClick: ()=>onDelete(item.location.id),
-                                                className: "text-red-600 hover:text-red-800 p-2",
-                                                title: "Delete location",
-                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                    className: "w-5 h-5",
-                                                    fill: "none",
-                                                    stroke: "currentColor",
-                                                    viewBox: "0 0 24 24",
-                                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                        strokeLinecap: "round",
-                                                        strokeLinejoin: "round",
-                                                        strokeWidth: 2,
-                                                        d: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                lineNumber: 277,
+                                                columnNumber: 19
+                                            }, this)),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                            className: "px-6 py-4 text-right",
+                                            onClick: (e)=>e.stopPropagation(),
+                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "flex items-center justify-end space-x-2",
+                                                children: [
+                                                    defaultLocationId === item.location.id ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                        className: "px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full",
+                                                        children: "Map Default"
                                                     }, void 0, false, {
                                                         fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                        lineNumber: 216,
+                                                        lineNumber: 284,
                                                         columnNumber: 23
+                                                    }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                        onClick: ()=>handleSetDefault(item.location.id),
+                                                        className: "px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors",
+                                                        title: "Set as map default",
+                                                        children: "Set as Default"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 288,
+                                                        columnNumber: 23
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                        onClick: ()=>onDelete(item.location.id),
+                                                        className: "text-red-600 hover:text-red-800 p-2",
+                                                        title: "Delete location",
+                                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                                            className: "w-5 h-5",
+                                                            fill: "none",
+                                                            stroke: "currentColor",
+                                                            viewBox: "0 0 24 24",
+                                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                                                                strokeLinecap: "round",
+                                                                strokeLinejoin: "round",
+                                                                strokeWidth: 2,
+                                                                d: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                                lineNumber: 307,
+                                                                columnNumber: 25
+                                                            }, this)
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                            lineNumber: 301,
+                                                            columnNumber: 23
+                                                        }, this)
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                                        lineNumber: 296,
+                                                        columnNumber: 21
                                                     }, this)
-                                                }, void 0, false, {
-                                                    fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                    lineNumber: 210,
-                                                    columnNumber: 21
-                                                }, this)
-                                            }, void 0, false, {
+                                                ]
+                                            }, void 0, true, {
                                                 fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                                lineNumber: 205,
+                                                lineNumber: 282,
                                                 columnNumber: 19
                                             }, this)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                        lineNumber: 191,
-                                        columnNumber: 17
-                                    }, this)
-                                }, void 0, false, {
+                                        }, void 0, false, {
+                                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
+                                            lineNumber: 281,
+                                            columnNumber: 17
+                                        }, this)
+                                    ]
+                                }, item.location.id, true, {
                                     fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                                    lineNumber: 190,
+                                    lineNumber: 244,
                                     columnNumber: 15
-                                }, this)
+                                }, this),
+                                expandedLocationId === item.location.id && renderExpandedRow(item)
                             ]
-                        }, item.location.id, true, {
-                            fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                            lineNumber: 172,
-                            columnNumber: 13
-                        }, this))
+                        }, void 0, true))
                 }, void 0, false, {
                     fileName: "[project]/components/favorites/FavoritesTable.tsx",
-                    lineNumber: 170,
+                    lineNumber: 241,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/components/favorites/FavoritesTable.tsx",
-            lineNumber: 151,
+            lineNumber: 228,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/components/favorites/FavoritesTable.tsx",
-        lineNumber: 150,
+        lineNumber: 227,
         columnNumber: 5
     }, this);
 }
-_s(FavoritesTable, "h9GFeJBKj8H8eYSxB73aZllw8J4=");
+_s(FavoritesTable, "nOrUhwDKNzjyKYFAa0xgnvsZwKQ=");
 _c = FavoritesTable;
 var _c;
 __turbopack_context__.k.register(_c, "FavoritesTable");
