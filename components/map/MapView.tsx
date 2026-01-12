@@ -58,6 +58,17 @@ export default function MapView({ favorites, onMapClick, selectedLocation, initi
     flyToLocation(lat, lng);
   }, [flyToLocation]);
 
+  // Update map location when initialLocation prop changes
+  useEffect(() => {
+    if (initialLocation && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [initialLocation.longitude, initialLocation.latitude],
+        zoom: initialLocation.zoom || 12,
+        duration: 1000,
+      });
+    }
+  }, [initialLocation]);
+
   // Fly to selected location when it changes
   useEffect(() => {
     if (selectedLocation) {
