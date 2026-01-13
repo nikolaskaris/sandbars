@@ -230,6 +230,7 @@ export async function getSurfForecast(
 
       // Parse wind from NWS
       const windSpeed = parseWindSpeed(period.windSpeed);
+      const windDir = parseWindDirection(period.windDirection);
 
       // Simple wave height variation (+/- 20% based on wind)
       const waveVariation = (windSpeed - 5) / 30; // More wind = bigger waves
@@ -242,9 +243,9 @@ export async function getSurfForecast(
           max: waveHeight * 1.2,
         },
         wavePeriod: baseWavePeriod,
-        waveDirection: baseWaveDirection,
+        waveDirection: baseWaveDirection ?? windDir, // Use wind direction as fallback
         windSpeed: windSpeed,
-        windDirection: parseWindDirection(period.windDirection),
+        windDirection: windDir,
         waterTemperature: buoyData.waterTemperature,
       });
     }
