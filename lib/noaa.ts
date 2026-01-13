@@ -128,16 +128,22 @@ async function getBuoyData(buoyId: string): Promise<NDBCBuoyData> {
     const windDir = data[5]; // WDIR - wind direction
     const waterTemp = parseFloat(data[14]); // WTMP - water temperature
 
-    return {
-      waveHeight: isNaN(waveHeight) ? undefined : waveHeight,
-      dominantWavePeriod: isNaN(dominantPeriod) ? undefined : dominantPeriod,
-      averageWavePeriod: isNaN(avgPeriod) ? undefined : avgPeriod,
-      waveDirection: waveDir === 'MM' ? undefined : waveDir,
-      windSpeed: isNaN(windSpeed) ? undefined : windSpeed,
-      windDirection: windDir === 'MM' ? undefined : windDir,
-      waterTemperature: isNaN(waterTemp) ? undefined : waterTemp,
+    // Helper to check if value is missing (MM or 999 are NDBC missing data markers)
+    const isMissing = (val: string) => val === 'MM' || val === '999' || val === '999.0';
+
+    const buoyResult = {
+      waveHeight: isNaN(waveHeight) || waveHeight === 99.0 ? undefined : waveHeight,
+      dominantWavePeriod: isNaN(dominantPeriod) || dominantPeriod === 99.0 ? undefined : dominantPeriod,
+      averageWavePeriod: isNaN(avgPeriod) || avgPeriod === 99.0 ? undefined : avgPeriod,
+      waveDirection: isMissing(waveDir) ? undefined : waveDir,
+      windSpeed: isNaN(windSpeed) || windSpeed === 99.0 ? undefined : windSpeed,
+      windDirection: isMissing(windDir) ? undefined : windDir,
+      waterTemperature: isNaN(waterTemp) || waterTemp === 99.0 ? undefined : waterTemp,
       timestamp: `${data[0]}-${data[1]}-${data[2]}T${data[3]}:${data[4]}:00Z`,
     };
+
+    console.log(`Buoy ${buoyId} data:`, buoyResult);
+    return buoyResult;
   } catch (error) {
     console.error('Error fetching NDBC buoy data:', error);
     return {};
@@ -223,6 +229,8 @@ export async function getSurfForecast(
     const baseWaveHeight = buoyData.waveHeight || 1.0;
     const baseWavePeriod = buoyData.dominantWavePeriod || buoyData.averageWavePeriod || 10;
     const baseWaveDirection = buoyData.waveDirection ? parseInt(buoyData.waveDirection) : undefined;
+
+    console.log('Buoy wave direction:', buoyData.waveDirection, '-> parsed:', baseWaveDirection);
 
     // Create forecasts for next 7 days (168 hours)
     for (let i = 0; i < Math.min(nwsForecast.length, 168); i++) {
