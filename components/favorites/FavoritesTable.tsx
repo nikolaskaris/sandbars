@@ -177,7 +177,7 @@ export default function FavoritesTable({ favorites, onDelete }: FavoritesTablePr
                     <td className="py-2 px-3 font-medium">Wind Direction</td>
                     {item.sevenDayForecasts.map((forecast, idx) => (
                       <td key={idx} className="text-center py-2 px-3">
-                        {forecast ? `${forecast.windDirection}°` : '-'}
+                        {forecast && forecast.windDirection !== undefined ? `${forecast.windDirection}°` : '-'}
                       </td>
                     ))}
                   </tr>
@@ -193,7 +193,7 @@ export default function FavoritesTable({ favorites, onDelete }: FavoritesTablePr
                     <td className="py-2 px-3 font-medium">Swell Direction</td>
                     {item.sevenDayForecasts.map((forecast, idx) => (
                       <td key={idx} className="text-center py-2 px-3">
-                        {forecast ? `${forecast.waveDirection}°` : '-'}
+                        {forecast && forecast.waveDirection !== undefined ? `${forecast.waveDirection}°` : '-'}
                       </td>
                     ))}
                   </tr>

@@ -222,7 +222,7 @@ export async function getSurfForecast(
     // Use buoy data as baseline if available
     const baseWaveHeight = buoyData.waveHeight || 1.0;
     const baseWavePeriod = buoyData.dominantWavePeriod || buoyData.averageWavePeriod || 10;
-    const baseWaveDirection = parseInt(buoyData.waveDirection || '270');
+    const baseWaveDirection = buoyData.waveDirection ? parseInt(buoyData.waveDirection) : undefined;
 
     // Create forecasts for next 7 days (168 hours)
     for (let i = 0; i < Math.min(nwsForecast.length, 168); i++) {
@@ -263,7 +263,7 @@ export async function getSurfForecast(
           wavePeriod: baseWavePeriod,
           waveDirection: baseWaveDirection,
           windSpeed: buoyData.windSpeed || 5,
-          windDirection: parseInt(buoyData.windDirection || '270'),
+          windDirection: buoyData.windDirection ? parseInt(buoyData.windDirection) : undefined,
           waterTemperature: buoyData.waterTemperature,
         });
       }
