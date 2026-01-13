@@ -128,16 +128,22 @@ async function getBuoyData(buoyId: string): Promise<NDBCBuoyData> {
     const windDir = data[5]; // WDIR - wind direction
     const waterTemp = parseFloat(data[14]); // WTMP - water temperature
 
-    return {
-      waveHeight: isNaN(waveHeight) ? undefined : waveHeight,
-      dominantWavePeriod: isNaN(dominantPeriod) ? undefined : dominantPeriod,
-      averageWavePeriod: isNaN(avgPeriod) ? undefined : avgPeriod,
-      waveDirection: waveDir === 'MM' ? undefined : waveDir,
-      windSpeed: isNaN(windSpeed) ? undefined : windSpeed,
-      windDirection: windDir === 'MM' ? undefined : windDir,
-      waterTemperature: isNaN(waterTemp) ? undefined : waterTemp,
+    // Helper to check if value is missing (MM or 999 are NDBC missing data markers)
+    const isMissing = (val: string) => val === 'MM' || val === '999' || val === '999.0';
+
+    const buoyResult = {
+      waveHeight: isNaN(waveHeight) || waveHeight === 99.0 ? undefined : waveHeight,
+      dominantWavePeriod: isNaN(dominantPeriod) || dominantPeriod === 99.0 ? undefined : dominantPeriod,
+      averageWavePeriod: isNaN(avgPeriod) || avgPeriod === 99.0 ? undefined : avgPeriod,
+      waveDirection: isMissing(waveDir) ? undefined : waveDir,
+      windSpeed: isNaN(windSpeed) || windSpeed === 99.0 ? undefined : windSpeed,
+      windDirection: isMissing(windDir) ? undefined : windDir,
+      waterTemperature: isNaN(waterTemp) || waterTemp === 99.0 ? undefined : waterTemp,
       timestamp: `${data[0]}-${data[1]}-${data[2]}T${data[3]}:${data[4]}:00Z`,
     };
+
+    console.log(`Buoy ${buoyId} data:`, buoyResult);
+    return buoyResult;
   } catch (error) {
     console.error('Error fetching NDBC buoy data:', error);
     return {};
@@ -222,14 +228,17 @@ export async function getSurfForecast(
     // Use buoy data as baseline if available
     const baseWaveHeight = buoyData.waveHeight || 1.0;
     const baseWavePeriod = buoyData.dominantWavePeriod || buoyData.averageWavePeriod || 10;
-    const baseWaveDirection = parseInt(buoyData.waveDirection || '270');
+    const baseWaveDirection = buoyData.waveDirection ? parseInt(buoyData.waveDirection) : undefined;
 
-    // Create forecasts for next 72 hours
-    for (let i = 0; i < Math.min(nwsForecast.length, 72); i++) {
+    console.log('Buoy wave direction:', buoyData.waveDirection, '-> parsed:', baseWaveDirection);
+
+    // Create forecasts for next 7 days (168 hours)
+    for (let i = 0; i < Math.min(nwsForecast.length, 168); i++) {
       const period = nwsForecast[i];
 
       // Parse wind from NWS
       const windSpeed = parseWindSpeed(period.windSpeed);
+      const windDir = parseWindDirection(period.windDirection);
 
       // Simple wave height variation (+/- 20% based on wind)
       const waveVariation = (windSpeed - 5) / 30; // More wind = bigger waves
@@ -242,17 +251,17 @@ export async function getSurfForecast(
           max: waveHeight * 1.2,
         },
         wavePeriod: baseWavePeriod,
-        waveDirection: baseWaveDirection,
+        waveDirection: baseWaveDirection ?? windDir, // Use wind direction as fallback
         windSpeed: windSpeed,
-        windDirection: parseWindDirection(period.windDirection),
+        windDirection: windDir,
         waterTemperature: buoyData.waterTemperature,
       });
     }
 
-    // If we don't have NWS data but have buoy data, create a basic forecast
+    // If we don't have NWS data but have buoy data, create a basic 7-day forecast
     if (forecasts.length === 0 && buoyId) {
       const now = new Date();
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < 168; i++) {
         const time = new Date(now.getTime() + i * 3600000);
         forecasts.push({
           time: time.toISOString(),
@@ -263,7 +272,7 @@ export async function getSurfForecast(
           wavePeriod: baseWavePeriod,
           waveDirection: baseWaveDirection,
           windSpeed: buoyData.windSpeed || 5,
-          windDirection: parseInt(buoyData.windDirection || '270'),
+          windDirection: buoyData.windDirection ? parseInt(buoyData.windDirection) : undefined,
           waterTemperature: buoyData.waterTemperature,
         });
       }

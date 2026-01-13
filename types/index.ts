@@ -20,8 +20,8 @@ export interface SurfForecast {
     max: number;
   };
   wavePeriod: number;
-  waveDirection: number;
+  waveDirection?: number;
   windSpeed: number;
-  windDirection: number;
+  windDirection?: number;
   waterTemperature?: number;
 }
