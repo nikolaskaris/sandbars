@@ -414,7 +414,7 @@ function FavoritesTable({ favorites, onDelete }) {
                                                     }, this),
                                                     item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             className: "text-center py-2 px-3",
-                                                            children: forecast ? `${forecast.windDirection}°` : '-'
+                                                            children: forecast && forecast.windDirection !== undefined ? `${forecast.windDirection}°` : '-'
                                                         }, idx, false, {
                                                             fileName: "[project]/components/favorites/FavoritesTable.tsx",
                                                             lineNumber: 179,
@@ -464,7 +464,7 @@ function FavoritesTable({ favorites, onDelete }) {
                                                     }, this),
                                                     item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             className: "text-center py-2 px-3",
-                                                            children: forecast ? `${forecast.waveDirection}°` : '-'
+                                                            children: forecast && forecast.waveDirection !== undefined ? `${forecast.waveDirection}°` : '-'
                                                         }, idx, false, {
                                                             fileName: "[project]/components/favorites/FavoritesTable.tsx",
                                                             lineNumber: 195,

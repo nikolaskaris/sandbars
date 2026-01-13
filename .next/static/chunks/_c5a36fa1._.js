@@ -452,7 +452,7 @@ function FavoritesTable(param) {
                                                     }, this),
                                                     item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             className: "text-center py-2 px-3",
-                                                            children: forecast ? "".concat(forecast.windDirection, "°") : '-'
+                                                            children: forecast && forecast.windDirection !== undefined ? "".concat(forecast.windDirection, "°") : '-'
                                                         }, idx, false, {
                                                             fileName: "[project]/components/favorites/FavoritesTable.tsx",
                                                             lineNumber: 179,
@@ -502,7 +502,7 @@ function FavoritesTable(param) {
                                                     }, this),
                                                     item.sevenDayForecasts.map((forecast, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                             className: "text-center py-2 px-3",
-                                                            children: forecast ? "".concat(forecast.waveDirection, "°") : '-'
+                                                            children: forecast && forecast.waveDirection !== undefined ? "".concat(forecast.waveDirection, "°") : '-'
                                                         }, idx, false, {
                                                             fileName: "[project]/components/favorites/FavoritesTable.tsx",
                                                             lineNumber: 195,

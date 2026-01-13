@@ -1,6 +1,5 @@
 {
   "/api/favorites/route": "app/api/favorites/route.js",
   "/api/forecast/route": "app/api/forecast/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
   "/favorites/page": "app/favorites/page.js"
 }
