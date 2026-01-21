@@ -1,6 +1,27 @@
 import { createClient } from '@/lib/supabase/server';
-import { getSurfForecast } from '@/lib/noaa';
+import { getSurfForecast } from '@/lib/forecast';
+import { SurfForecast, EnhancedSurfForecast } from '@/types';
 import { NextResponse } from 'next/server';
+
+/**
+ * Convert enhanced forecast to legacy format for backwards compatibility
+ */
+function toLegacyFormat(enhanced: EnhancedSurfForecast): SurfForecast {
+  return {
+    time: enhanced.time,
+    waveHeight: {
+      min: enhanced.waveHeight.min,
+      max: enhanced.waveHeight.max,
+    },
+    wavePeriod: enhanced.wavePeriod.value,
+    waveDirection: enhanced.waveDirection?.value,
+    windSpeed: enhanced.windSpeed.value,
+    windDirection: enhanced.windDirection?.value,
+    waterTemperature: enhanced.waterTemperature?.value,
+    airTemperature: enhanced.airTemperature?.value,
+    wavePower: enhanced.wavePower?.value,
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -15,6 +36,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const lat = parseFloat(searchParams.get('lat') || '');
     const lng = parseFloat(searchParams.get('lng') || '');
+    const enhanced = searchParams.get('enhanced') === 'true'; // Optional: return enhanced format
+    const hours = parseInt(searchParams.get('hours') || '168'); // Default 7 days
 
     if (isNaN(lat) || isNaN(lng)) {
       return NextResponse.json(
@@ -23,9 +46,16 @@ export async function GET(request: Request) {
       );
     }
 
-    const forecast = await getSurfForecast(lat, lng);
+    const forecastData = await getSurfForecast(lat, lng, hours);
 
-    return NextResponse.json(forecast);
+    // Return enhanced format with metadata, or legacy format
+    if (enhanced) {
+      return NextResponse.json(forecastData);
+    } else {
+      // Convert to legacy format for backwards compatibility
+      const legacyForecasts = forecastData.forecasts.map(toLegacyFormat);
+      return NextResponse.json(legacyForecasts);
+    }
   } catch (error) {
     console.error('Forecast API error:', error);
     return NextResponse.json(
