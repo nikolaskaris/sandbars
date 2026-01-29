@@ -1,269 +1,329 @@
 /**
  * WAVEWATCH III (NOAA Global Wave Model) Data Source
- * Provides global wave forecasts at 0.25° resolution
+ *
+ * Fetches real wave model data from NOAA/PacIOOS ERDDAP.
+ * The data naturally only exists over ocean - no land masking needed.
+ *
+ * Data source: University of Hawaii PacIOOS WaveWatch III Global Model
+ * https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_global.html
  */
 
-import { QualityFlag } from '@/types';
+// PacIOOS ERDDAP - reliable, well-maintained
+const ERDDAP_BASE = 'https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_global';
 
-const NOMADS_BASE_URL = 'https://nomads.ncep.noaa.gov/cgi-bin/filter_gfswave.pl';
-const OPENDAP_BASE_URL = 'https://nomads.ncep.noaa.gov/dods/wave/gfswave';
-
-export interface WaveWatchGrid {
-  latitude: number;
-  longitude: number;
+export interface WaveWatchGridPoint {
+  lat: number;
+  lon: number;
+  waveHeight: number;       // Significant wave height in meters
+  waveDirection: number;    // Mean wave direction in degrees
+  wavePeriod: number;       // Peak wave period in seconds
   timestamp: string;
-  significantWaveHeight?: number;
-  peakWavePeriod?: number;
-  meanWaveDirection?: number;
-  swell1Height?: number;
-  swell1Period?: number;
-  swell1Direction?: number;
-  windWaveHeight?: number;
-  quality: QualityFlag;
 }
 
-export interface WaveWatchForecast {
-  modelRun: Date;
-  validTime: Date;
-  forecastHour: number;
-  data: WaveWatchGrid[];
+export interface WaveWatchResponse {
+  points: WaveWatchGridPoint[];
+  modelRun: string;
+  fetchedAt: string;
+  source: string;
 }
 
 /**
- * Get the latest WAVEWATCH III model run time
+ * Get the latest model run time
+ * WW3 model updates hourly with ~6 hour delay
  */
 export function getLatestModelRun(): Date {
   const now = new Date();
-  const hour = now.getUTCHours();
-
-  // Model runs at 00Z, 06Z, 12Z, 18Z
-  const cycleHour = Math.floor(hour / 6) * 6;
-
-  const modelRun = new Date(now);
-  modelRun.setUTCHours(cycleHour, 0, 0, 0);
-
-  // If less than 3 hours since model run, use previous run
-  if (now.getTime() - modelRun.getTime() < 3 * 60 * 60 * 1000) {
-    modelRun.setTime(modelRun.getTime() - 6 * 60 * 60 * 1000);
-  }
-
-  return modelRun;
+  // Go back 6 hours to ensure data is available
+  now.setUTCHours(now.getUTCHours() - 6);
+  return now;
 }
 
 /**
- * Fetch WAVEWATCH III data for a specific location
- * Uses NOMADS GRIB filter to download only needed subset
+ * Fetch global WAVEWATCH III grid data from ERDDAP
+ *
+ * The data naturally only covers ocean - no land masking needed.
+ * Land cells have NaN values which we simply skip.
  */
-export async function fetchWaveWatchData(
-  lat: number,
-  lon: number,
-  forecastHours: number[] = [0, 3, 6, 12, 24, 48, 72, 96, 120, 144, 168]
-): Promise<WaveWatchGrid[]> {
+export async function fetchWaveWatchGlobalGrid(
+  bounds?: { minLat: number; maxLat: number; minLon: number; maxLon: number }
+): Promise<WaveWatchResponse | null> {
+  const {
+    minLat = -77.5,
+    maxLat = 77.5,
+    minLon = -180,
+    maxLon = 180,
+  } = bounds || {};
+
+  // ERDDAP uses 0-360 longitude, convert from -180 to 180
+  const erddapMinLon = minLon < 0 ? minLon + 360 : minLon;
+  const erddapMaxLon = maxLon < 0 ? maxLon + 360 : maxLon;
+
+  // For global coverage, we need to handle the date line
+  // Request in two parts if spanning the date line
+  const needsTwoParts = minLon < 0 && maxLon > 0;
+
+  // Use stride of 4 (2° resolution from 0.5° native) for reasonable data size
+  const stride = 4;
+
   try {
-    const modelRun = getLatestModelRun();
+    let allPoints: WaveWatchGridPoint[] = [];
 
-    console.log(`Fetching WAVEWATCH III data for ${lat},${lon} from model run ${modelRun.toISOString()}`);
+    if (needsTwoParts) {
+      // Part 1: Western hemisphere (180-360 in ERDDAP coords)
+      const westPoints = await fetchERDDAPRegion(
+        minLat, maxLat,
+        180 + minLon, 359.5, // -180 to 0 maps to 180-360
+        stride
+      );
 
-    // Normalize longitude to 0-360 for NOMADS
-    const normLon = lon < 0 ? lon + 360 : lon;
+      // Part 2: Eastern hemisphere (0-180 in ERDDAP coords)
+      const eastPoints = await fetchERDDAPRegion(
+        minLat, maxLat,
+        0, maxLon,
+        stride
+      );
 
-    // Define bounding box (0.5° around point)
-    const latMin = Math.max(-90, lat - 0.25);
-    const latMax = Math.min(90, lat + 0.25);
-    const lonMin = Math.max(0, normLon - 0.25);
-    const lonMax = Math.min(360, normLon + 0.25);
-
-    const results: WaveWatchGrid[] = [];
-
-    // Fetch data for each forecast hour
-    // NOTE: This is a simplified implementation
-    // In production, you would:
-    // 1. Use GRIB2 parsing library (like grib2json or convert via Python microservice)
-    // 2. Batch requests efficiently
-    // 3. Cache GRIB files locally
-
-    // For now, return mock data structure with quality flag
-    for (const fhour of forecastHours) {
-      const validTime = new Date(modelRun.getTime() + fhour * 3600000);
-
-      // TODO: Actual GRIB parsing would go here
-      // For now, document the data structure
-
-      results.push({
-        latitude: lat,
-        longitude: lon,
-        timestamp: validTime.toISOString(),
-        significantWaveHeight: undefined, // Would be parsed from GRIB HTSGW
-        peakWavePeriod: undefined, // Would be parsed from GRIB PERPW
-        meanWaveDirection: undefined, // Would be parsed from GRIB DIRPW
-        swell1Height: undefined, // Would be parsed from GRIB SWELL_1
-        swell1Period: undefined,
-        swell1Direction: undefined,
-        windWaveHeight: undefined, // Would be parsed from GRIB WIND_WAVE
-        quality: 'modeled' as QualityFlag,
-      });
+      allPoints = [...westPoints, ...eastPoints];
+    } else {
+      allPoints = await fetchERDDAPRegion(
+        minLat, maxLat,
+        erddapMinLon, erddapMaxLon,
+        stride
+      );
     }
 
-    return results;
+    console.log(`Fetched ${allPoints.length} wave grid points from ERDDAP`);
+
+    return {
+      points: allPoints,
+      modelRun: new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+      source: 'wavewatch3_erddap',
+    };
   } catch (error) {
-    console.error('Error fetching WAVEWATCH III data:', error);
-    return [];
+    console.error('Error fetching from ERDDAP:', error);
+    // Fall back to synthetic data if ERDDAP fails
+    return fetchSyntheticFallback(bounds);
   }
 }
 
 /**
- * Build NOMADS filter URL for GRIB subset
+ * Fetch a region from ERDDAP
  */
-function buildNOMADSFilterURL(
-  modelRun: Date,
-  forecastHour: number,
-  latMin: number,
-  latMax: number,
-  lonMin: number,
-  lonMax: number
-): string {
-  const dateStr = modelRun.toISOString().slice(0, 10).replace(/-/g, '');
-  const cycleHour = modelRun.getUTCHours().toString().padStart(2, '0');
+async function fetchERDDAPRegion(
+  minLat: number,
+  maxLat: number,
+  minLon: number,
+  maxLon: number,
+  stride: number
+): Promise<WaveWatchGridPoint[]> {
+  // Build ERDDAP query URL
+  // Format: variable[(time)][(depth)][(lat_start):stride:(lat_end)][(lon_start):stride:(lon_end)]
+  const url = `${ERDDAP_BASE}.json?` +
+    `Thgt[(last)][(0.0)][(${minLat}):${stride}:(${maxLat})][(${minLon}):${stride}:(${maxLon})],` +
+    `Tdir[(last)][(0.0)][(${minLat}):${stride}:(${maxLat})][(${minLon}):${stride}:(${maxLon})],` +
+    `Tper[(last)][(0.0)][(${minLat}):${stride}:(${maxLat})][(${minLon}):${stride}:(${maxLon})]`;
 
-  const params = new URLSearchParams({
-    file: `gfswave.t${cycleHour}z.global.0p25.f${forecastHour.toString().padStart(3, '0')}.grib2`,
-    // Variables to download
-    var_HTSGW: 'on', // Significant height of combined wind waves and swell
-    var_PERPW: 'on', // Primary wave mean period
-    var_DIRPW: 'on', // Primary wave direction
-    var_SWELL: 'on', // Swell component
-    // Level
-    lev_surface: 'on',
-    // Bounding box
-    subregion: '',
-    leftlon: lonMin.toString(),
-    rightlon: lonMax.toString(),
-    toplat: latMax.toString(),
-    bottomlat: latMin.toString(),
-    // Output directory
-    dir: `/gfs.${dateStr}/${cycleHour}/wave/gridded`,
+  console.log(`Fetching ERDDAP data for region: lat ${minLat}-${maxLat}, lon ${minLon}-${maxLon}`);
+
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+    // Long timeout for large requests
+    signal: AbortSignal.timeout(60000),
   });
 
-  return `${NOMADS_BASE_URL}?${params.toString()}`;
+  if (!response.ok) {
+    throw new Error(`ERDDAP request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const points: WaveWatchGridPoint[] = [];
+
+  // Parse ERDDAP response
+  // Format: { table: { columnNames: [...], rows: [[time, depth, lat, lon, Thgt], ...] } }
+  if (!data.table?.rows) {
+    console.warn('No data in ERDDAP response');
+    return [];
+  }
+
+  const { columnNames, rows } = data.table;
+  const timeIdx = columnNames.indexOf('time');
+  const latIdx = columnNames.indexOf('latitude');
+  const lonIdx = columnNames.indexOf('longitude');
+  const hgtIdx = columnNames.indexOf('Thgt');
+  const dirIdx = columnNames.indexOf('Tdir');
+  const perIdx = columnNames.indexOf('Tper');
+
+  for (const row of rows) {
+    const waveHeight = row[hgtIdx];
+
+    // Skip NaN values (land areas)
+    if (waveHeight === null || waveHeight === undefined || isNaN(waveHeight)) {
+      continue;
+    }
+
+    let lon = row[lonIdx];
+    // Convert ERDDAP longitude (0-360) to standard (-180 to 180)
+    if (lon > 180) {
+      lon = lon - 360;
+    }
+
+    const waveDirection = row[dirIdx];
+    const wavePeriod = row[perIdx];
+
+    points.push({
+      lat: row[latIdx],
+      lon,
+      waveHeight: Math.round(waveHeight * 100) / 100,
+      waveDirection: waveDirection !== null && !isNaN(waveDirection)
+        ? Math.round(waveDirection)
+        : 0,
+      wavePeriod: wavePeriod !== null && !isNaN(wavePeriod)
+        ? Math.round(wavePeriod * 10) / 10
+        : 0,
+      timestamp: row[timeIdx],
+    });
+  }
+
+  return points;
 }
 
 /**
- * Interpolate grid data to specific point
- * Uses bilinear interpolation
+ * Synthetic fallback when ERDDAP is unavailable
+ * Uses a proper ocean mask based on known ocean coordinates
  */
-export function interpolateGridPoint(
-  gridData: WaveWatchGrid[],
-  targetLat: number,
-  targetLon: number
-): WaveWatchGrid | null {
-  if (gridData.length === 0) return null;
+async function fetchSyntheticFallback(
+  bounds?: { minLat: number; maxLat: number; minLon: number; maxLon: number }
+): Promise<WaveWatchResponse | null> {
+  console.log('ERDDAP unavailable, generating synthetic fallback data');
 
-  // Find nearest grid points
-  const nearest = gridData
-    .map(point => ({
-      point,
-      distance: Math.sqrt(
-        Math.pow(point.latitude - targetLat, 2) + Math.pow(point.longitude - targetLon, 2)
-      ),
-    }))
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, 4); // Get 4 nearest points for bilinear interpolation
+  const {
+    minLat = -77.5,
+    maxLat = 77.5,
+    minLon = -180,
+    maxLon = 180,
+  } = bounds || {};
 
-  if (nearest.length === 0) return null;
+  const points: WaveWatchGridPoint[] = [];
+  const timestamp = new Date().toISOString();
+  const step = 2; // 2 degree grid
 
-  // Simple nearest neighbor for now
-  // TODO: Implement proper bilinear interpolation
-  const closestPoint = nearest[0].point;
+  // Time-based variation
+  const daySeed = Math.floor(Date.now() / (6 * 60 * 60 * 1000));
+
+  for (let lat = minLat; lat <= maxLat; lat += step) {
+    for (let lon = minLon; lon <= maxLon; lon += step) {
+      // Simple ocean check - only generate for likely ocean areas
+      if (!isLikelyOcean(lat, lon)) continue;
+
+      // Generate wave height based on latitude (climatology)
+      const absLat = Math.abs(lat);
+      let baseHeight: number;
+
+      if (absLat > 50) baseHeight = 4.0;      // High latitude storms
+      else if (absLat > 40) baseHeight = 3.0; // Storm tracks
+      else if (absLat > 25) baseHeight = 2.0; // Mid-latitudes
+      else if (absLat > 10) baseHeight = 1.2; // Trade winds
+      else baseHeight = 0.7;                   // Doldrums
+
+      // Add spatial variation
+      const variation = Math.sin((lat + daySeed) * 0.1) * Math.cos((lon + daySeed) * 0.08) * 0.5;
+      const waveHeight = Math.max(0.3, baseHeight + variation);
+
+      // Direction based on latitude bands
+      let direction: number;
+      if (lat < -30 || lat > 30) direction = 270; // Westerlies
+      else if (lat > 0) direction = 225;          // NE trades
+      else direction = 315;                        // SE trades
+
+      const wavePeriod = 6 + waveHeight * 1.2;
+
+      points.push({
+        lat,
+        lon,
+        waveHeight: Math.round(waveHeight * 100) / 100,
+        waveDirection: direction,
+        wavePeriod: Math.round(wavePeriod * 10) / 10,
+        timestamp,
+      });
+    }
+  }
+
+  console.log(`Generated ${points.length} synthetic fallback points`);
 
   return {
-    ...closestPoint,
-    latitude: targetLat,
-    longitude: targetLon,
+    points,
+    modelRun: new Date().toISOString(),
+    fetchedAt: new Date().toISOString(),
+    source: 'synthetic_fallback',
   };
 }
 
 /**
- * GRIB2 to JSON converter service endpoint
- *
- * NOTE: This requires a separate Python/Node service to convert GRIB2 to JSON
- * Example using grib2json or similar tool:
- *
- * ```python
- * import pygrib
- * import json
- *
- * grbs = pygrib.open('gfswave.t00z.global.0p25.f003.grib2')
- *
- * for grb in grbs:
- *     if grb.name == 'Significant height of combined wind waves and swell':
- *         data = {
- *             'values': grb.values.tolist(),
- *             'lats': grb.latlons()[0].tolist(),
- *             'lons': grb.latlons()[1].tolist(),
- *         }
- *         print(json.dumps(data))
- * ```
+ * Simple heuristic for likely ocean areas
+ * This is only used as a fallback - real ERDDAP data has proper masking
  */
-export async function fetchViaGRIBService(
-  serviceUrl: string,
-  modelRun: Date,
-  forecastHour: number,
-  lat: number,
-  lon: number
-): Promise<WaveWatchGrid | null> {
-  try {
-    const response = await fetch(serviceUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'wavewatch3',
-        run: modelRun.toISOString(),
-        forecast_hour: forecastHour,
-        latitude: lat,
-        longitude: lon,
-      }),
-    });
+function isLikelyOcean(lat: number, lon: number): boolean {
+  // Major continental interiors (definitely not ocean)
 
-    if (!response.ok) {
-      console.error(`GRIB service error: ${response.statusText}`);
-      return null;
-    }
+  // North America interior
+  if (lat > 25 && lat < 70 && lon > -125 && lon < -60) return false;
 
-    const data = await response.json();
+  // South America
+  if (lat > -55 && lat < 10 && lon > -80 && lon < -35) return false;
 
-    return {
-      latitude: lat,
-      longitude: lon,
-      timestamp: data.valid_time,
-      significantWaveHeight: data.htsgw,
-      peakWavePeriod: data.perpw,
-      meanWaveDirection: data.dirpw,
-      swell1Height: data.swell1_height,
-      swell1Period: data.swell1_period,
-      swell1Direction: data.swell1_direction,
-      windWaveHeight: data.wind_wave_height,
-      quality: 'modeled',
-    };
-  } catch (error) {
-    console.error('Error fetching from GRIB service:', error);
-    return null;
-  }
+  // Europe + Western Asia
+  if (lat > 35 && lat < 72 && lon > -10 && lon < 60) return false;
+
+  // Africa
+  if (lat > -35 && lat < 37 && lon > -18 && lon < 52) return false;
+
+  // Asia (broad interior)
+  if (lat > 10 && lat < 75 && lon > 55 && lon < 145) return false;
+
+  // Australia
+  if (lat > -45 && lat < -10 && lon > 110 && lon < 155) return false;
+
+  // Antarctica
+  if (lat < -75) return false;
+
+  // Arctic
+  if (lat > 80) return false;
+
+  return true;
 }
 
 /**
- * Calculate distance between two points (Haversine)
+ * Fetch WAVEWATCH III data for a specific point
  */
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+export async function fetchWaveWatchPoint(
+  lat: number,
+  lon: number
+): Promise<WaveWatchGridPoint | null> {
+  const response = await fetchWaveWatchGlobalGrid({
+    minLat: lat - 2,
+    maxLat: lat + 2,
+    minLon: lon - 2,
+    maxLon: lon + 2,
+  });
 
-function toRad(degrees: number): number {
-  return (degrees * Math.PI) / 180;
+  if (!response || response.points.length === 0) {
+    return null;
+  }
+
+  // Find nearest point
+  let nearest = response.points[0];
+  let minDist = Infinity;
+
+  for (const point of response.points) {
+    const dist = Math.sqrt(
+      Math.pow(point.lat - lat, 2) + Math.pow(point.lon - lon, 2)
+    );
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = point;
+    }
+  }
+
+  return nearest;
 }

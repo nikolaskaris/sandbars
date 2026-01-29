@@ -7,9 +7,11 @@ import { QualityFlag, MetricType } from '@/types';
 import {
   fetchNDBCBuoyData,
   findNearestBuoys,
+  findNearestBuoyWithData,
   NDBCBuoyReading,
   calculateDistance,
 } from './sources/ndbc';
+import { getSeaSurfaceTemperature } from './sources/sst';
 import {
   fetchNWSForecast,
   convertNWSToWeatherData,
@@ -190,7 +192,7 @@ export async function getWaveDirection(
 ): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
-  // Primary: Try nearest buoy
+  // Primary: Try nearest buoy within 50km
   const nearestBuoys = findNearestBuoys(lat, lon, 50, 1);
   if (nearestBuoys.length > 0) {
     const buoy = nearestBuoys[0];
@@ -207,7 +209,49 @@ export async function getWaveDirection(
     }
   }
 
-  // Fallback to wind direction if available
+  // Secondary: Try interpolation from multiple buoys within 100km
+  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+  if (nearbyBuoys.length >= 2) {
+    sourceHierarchy.push('buoy_interpolation');
+
+    const dataPoints: DataPoint[] = [];
+    for (const buoy of nearbyBuoys) {
+      const buoyData = await fetchNDBCBuoyData(buoy.id);
+      if (buoyData && buoyData.waveDirection !== undefined) {
+        dataPoints.push({
+          value: buoyData.waveDirection,
+          distance: calculateDistance(lat, lon, buoy.lat, buoy.lon),
+          quality: buoyData.quality,
+        });
+      }
+    }
+
+    if (dataPoints.length >= 2) {
+      const interpolated = inverseDistanceWeighting(dataPoints);
+      if (interpolated) {
+        return {
+          value: interpolated.value,
+          quality: interpolated.quality,
+          source: `Interpolated from ${dataPoints.length} buoys`,
+          sourceHierarchy,
+        };
+      }
+    }
+  }
+
+  // Tertiary: Find nearest buoy with valid MWD data (wider search - 500km)
+  sourceHierarchy.push('nearest_with_data');
+  const nearestWithData = await findNearestBuoyWithData(lat, lon, 'waveDirection', 500);
+  if (nearestWithData) {
+    return {
+      value: nearestWithData.data.waveDirection!,
+      quality: 'interpolated',
+      source: `Nearest buoy ${nearestWithData.buoy.id} (${nearestWithData.distance.toFixed(0)}km)`,
+      sourceHierarchy,
+    };
+  }
+
+  // Quaternary: Fall back to wind direction if available
   if (windDirection !== undefined) {
     sourceHierarchy.push('wind_direction_fallback');
     return {
@@ -359,34 +403,68 @@ export async function getWindData(
   const speedInterp = interpolateWindData(speedDataPoints, distanceToShore);
   const dirInterp = interpolateWindData(dirDataPoints, distanceToShore);
 
+  // If we have interpolated data, use it
+  if (speedInterp || dirInterp) {
+    return {
+      speed: speedInterp
+        ? {
+            value: speedInterp.value,
+            quality: speedInterp.quality,
+            source: `Interpolated from ${speedDataPoints.length} buoys`,
+            sourceHierarchy: [...sourceHierarchy, 'buoy_interpolation'],
+          }
+        : { value: 5, quality: 'historical', source: 'Default', sourceHierarchy: [...sourceHierarchy, 'fallback'] },
+      direction: dirInterp
+        ? {
+            value: dirInterp.value,
+            quality: dirInterp.quality,
+            source: `Interpolated from ${dirDataPoints.length} buoys`,
+            sourceHierarchy: [...sourceHierarchy, 'buoy_interpolation'],
+          }
+        : { value: null, quality: 'missing', source: 'No data', sourceHierarchy: [...sourceHierarchy, 'no_data'] },
+    };
+  }
+
+  // Tertiary: Try nearest buoy with valid data (wider search - 500km)
+  sourceHierarchy.push('nearest_with_data');
+
+  let speedResult: MetricValue = { value: 5, quality: 'historical', source: 'Default', sourceHierarchy: [...sourceHierarchy, 'fallback'] };
+  let directionResult: MetricValue = { value: null, quality: 'missing', source: 'No data', sourceHierarchy: [...sourceHierarchy, 'no_data'] };
+
+  const nearestWithSpeed = await findNearestBuoyWithData(lat, lon, 'windSpeed', 500);
+  if (nearestWithSpeed) {
+    speedResult = {
+      value: nearestWithSpeed.data.windSpeed!,
+      quality: 'interpolated',
+      source: `Nearest buoy ${nearestWithSpeed.buoy.id} (${nearestWithSpeed.distance.toFixed(0)}km)`,
+      sourceHierarchy: [...sourceHierarchy],
+    };
+  }
+
+  const nearestWithDir = await findNearestBuoyWithData(lat, lon, 'windDirection', 500);
+  if (nearestWithDir) {
+    directionResult = {
+      value: nearestWithDir.data.windDirection!,
+      quality: 'interpolated',
+      source: `Nearest buoy ${nearestWithDir.buoy.id} (${nearestWithDir.distance.toFixed(0)}km)`,
+      sourceHierarchy: [...sourceHierarchy],
+    };
+  }
+
   return {
-    speed: speedInterp
-      ? {
-          value: speedInterp.value,
-          quality: speedInterp.quality,
-          source: `Interpolated from ${speedDataPoints.length} buoys`,
-          sourceHierarchy: [...sourceHierarchy, 'buoy_interpolation'],
-        }
-      : { value: 5, quality: 'historical', source: 'Default', sourceHierarchy: [...sourceHierarchy, 'fallback'] },
-    direction: dirInterp
-      ? {
-          value: dirInterp.value,
-          quality: dirInterp.quality,
-          source: `Interpolated from ${dirDataPoints.length} buoys`,
-          sourceHierarchy: [...sourceHierarchy, 'buoy_interpolation'],
-        }
-      : { value: null, quality: 'missing', source: 'No data', sourceHierarchy: [...sourceHierarchy, 'no_data'] },
+    speed: speedResult,
+    direction: directionResult,
   };
 }
 
 /**
- * Get water temperature from buoys
+ * Get water temperature from buoys with SST satellite fallback
  */
 export async function getWaterTemperature(lat: number, lon: number): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
-  // Try nearby buoys
-  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+  // Primary: Try nearby buoys (< 50km for real-time accuracy)
+  const nearbyBuoys = findNearestBuoys(lat, lon, 50, 5);
   const dataPoints: DataPoint[] = [];
 
   for (const buoy of nearbyBuoys) {
@@ -411,6 +489,30 @@ export async function getWaterTemperature(lat: number, lon: number): Promise<Met
         sourceHierarchy,
       };
     }
+  }
+
+  // Secondary: Try SST satellite data (global coverage)
+  sourceHierarchy.push('oisst_satellite');
+  const sstData = await getSeaSurfaceTemperature(lat, lon);
+  if (sstData) {
+    return {
+      value: sstData.temperature,
+      quality: sstData.quality,
+      source: 'NOAA OISST Satellite',
+      sourceHierarchy,
+    };
+  }
+
+  // Tertiary: Try nearest buoy with water temp (wider search - 200km)
+  sourceHierarchy.push('nearest_buoy_extended');
+  const nearestWithTemp = await findNearestBuoyWithData(lat, lon, 'waterTemperature', 200);
+  if (nearestWithTemp) {
+    return {
+      value: nearestWithTemp.data.waterTemperature!,
+      quality: 'interpolated',
+      source: `Nearest buoy ${nearestWithTemp.buoy.id} (${nearestWithTemp.distance.toFixed(0)}km)`,
+      sourceHierarchy,
+    };
   }
 
   sourceHierarchy.push('no_data');

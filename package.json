@@ -11,21 +11,30 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:sources": "jest --testPathPattern='sources'",
-    "test:integration": "jest --testPathPattern='integration'"
+    "test:integration": "jest --testPathPattern='integration'",
+    "cron:stations": "curl -s http://localhost:3000/api/cron/sync-stations | jq",
+    "cron:readings": "curl -s http://localhost:3000/api/cron/sync-readings | jq",
+    "cron:grid": "curl -s http://localhost:3000/api/cron/compute-grid | jq",
+    "cron:wavewatch": "curl -s http://localhost:3000/api/cron/sync-wavewatch | jq",
+    "cron:all": "npm run cron:stations && npm run cron:wavewatch",
+    "db:migrate": "echo 'Run the SQL in supabase/migrations/001_wave_grid.sql in your Supabase SQL editor'"
   },
   "dependencies": {
+    "@sakitam-gis/maplibre-wind": "^2.0.3",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.39.0",
-    "mapbox-gl": "^3.0.1",
+    "date-fns": "^4.1.0",
+    "maplibre-gl": "^4.7.1",
     "next": "^15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-map-gl": "^7.1.7"
+    "react-map-gl": "^7.1.7",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
     "@types/jest": "^30.0.0",
-    "@types/mapbox-gl": "^3.1.0",
+    "@types/maplibre-gl": "^1.13.2",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

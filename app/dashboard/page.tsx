@@ -5,53 +5,32 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Header from '@/components/ui/Header';
-import FavoritesList from '@/components/favorites/FavoritesList';
-import ForecastCard from '@/components/favorites/ForecastCard';
 import AddLocationModal from '@/components/map/AddLocationModal';
-import { FavoriteLocation, SurfForecast } from '@/types';
+import { FavoriteLocation } from '@/types';
 
-// Dynamically import MapView to avoid SSR issues with mapbox-gl
+// Dynamically import MapView to avoid SSR issues with maplibre-gl
 const MapView = dynamic(() => import('@/components/map/MapView'), {
   ssr: false,
-  loading: () => <div className="w-full h-full bg-gray-100 animate-pulse" />,
 });
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [favorites, setFavorites] = useState<FavoriteLocation[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<FavoriteLocation | null>(null);
-  const [forecast, setForecast] = useState<SurfForecast[]>([]);
-  const [forecastLoading, setForecastLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [initialMapLocation, setInitialMapLocation] = useState<{ latitude: number; longitude: number; zoom: number } | undefined>();
+  const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  // Track client-side mount for hydration safety
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     checkUser();
     fetchFavorites();
   }, []);
-
-  useEffect(() => {
-    if (selectedLocation) {
-      fetchForecast(selectedLocation.latitude, selectedLocation.longitude);
-    }
-  }, [selectedLocation]);
-
-  // Set initial map location when favorites load
-  useEffect(() => {
-    if (favorites.length > 0 && !initialMapLocation) {
-      const defaultLocationId = localStorage.getItem('defaultMapLocationId');
-      let defaultLocation = favorites.find(f => f.id === defaultLocationId) || favorites[0];
-
-      setInitialMapLocation({
-        latitude: defaultLocation.latitude,
-        longitude: defaultLocation.longitude,
-        zoom: 12,
-      });
-    }
-  }, [favorites, initialMapLocation]);
 
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -67,21 +46,6 @@ export default function DashboardPage() {
     if (response.ok) {
       const data = await response.json();
       setFavorites(data);
-    }
-  };
-
-  const fetchForecast = async (lat: number, lng: number) => {
-    setForecastLoading(true);
-    try {
-      const response = await fetch(`/api/forecast?lat=${lat}&lng=${lng}`);
-      if (response.ok) {
-        const data = await response.json();
-        setForecast(data);
-      }
-    } catch (error) {
-      console.error('Error fetching forecast:', error);
-    } finally {
-      setForecastLoading(false);
     }
   };
 
@@ -104,63 +68,27 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteLocation = async (id: string) => {
-    if (confirm('Are you sure you want to delete this location?')) {
-      const response = await fetch(`/api/favorites/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setFavorites(favorites.filter((f) => f.id !== id));
-        if (selectedLocation?.id === id) {
-          setSelectedLocation(null);
-          setForecast([]);
-        }
-      }
-    }
-  };
-
-  const handleSelectLocation = (favorite: FavoriteLocation) => {
-    setSelectedLocation(favorite);
-  };
-
   return (
     <div className="h-screen flex flex-col">
       <Header userEmail={user?.email} />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-96 bg-gray-50 border-r border-gray-200 overflow-y-auto">
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-4 text-gray-900">Favorite Locations</h2>
-            <FavoritesList
-              favorites={favorites}
-              selectedId={selectedLocation?.id || null}
-              onSelect={handleSelectLocation}
-              onDelete={handleDeleteLocation}
-            />
-          </div>
-
-          {selectedLocation && (
-            <div className="p-6 border-t">
-              <ForecastCard
-                forecast={forecast}
-                locationName={selectedLocation.name}
-                loading={forecastLoading}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Map */}
-        <div className="flex-1 relative">
+      {/* Full Screen Map */}
+      <div className="flex-1 relative">
+        {isMounted && (
           <MapView
             favorites={favorites}
             onMapClick={handleMapClick}
-            selectedLocation={selectedLocation}
-            initialLocation={initialMapLocation}
+            showFavorites={true}
+            showWaveLayer={true}
+            showBuoyLayer={false}
+            fullScreen={true}
           />
-        </div>
+        )}
+        {!isMounted && (
+          <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+            <div className="text-white">Loading map...</div>
+          </div>
+        )}
       </div>
 
       <AddLocationModal

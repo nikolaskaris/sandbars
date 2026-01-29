@@ -153,3 +153,79 @@ export interface SurfForecast {
   airTemperature?: number;
   wavePower?: number;
 }
+
+// ============================================
+// WIND VISUALIZATION TYPES
+// ============================================
+
+// Wind data format expected by wind visualization libraries
+export interface WindDataHeader {
+  parameterCategory: number;
+  parameterNumber: number;  // 2 for U, 3 for V
+  lo1: number;              // Starting longitude
+  la1: number;              // Starting latitude (top of grid)
+  dx: number;               // Grid spacing in degrees
+  dy: number;
+  nx: number;               // Grid points in X
+  ny: number;               // Grid points in Y
+}
+
+export interface WindData {
+  header: WindDataHeader;
+  data: number[];           // Flattened array, row-major order
+}
+
+// ============================================
+// FORECAST TIMELINE TYPES
+// ============================================
+
+// Latest forecast info for UI
+export interface LatestForecastInfo {
+  gfs?: {
+    run: string;            // e.g., "2024011512"
+    forecast_hours: number[];
+  };
+  ww3?: {
+    run: string;
+    forecast_hours: number[];
+  };
+  wavewatch?: {
+    run: string;
+    timestamp: string;
+  };
+}
+
+// Map layer visibility state
+export interface LayerVisibility {
+  wind: boolean;
+  waveHeight: boolean;
+  swellDirection: boolean;
+  buoys: boolean;
+}
+
+// ============================================
+// BUOY OBSERVATION TYPES (for new schema)
+// ============================================
+
+// Buoy observation with all data fields
+export interface BuoyObservation {
+  station_id: string;
+  name: string | null;
+  lat: number;
+  lon: number;
+  observed_at: string;
+  wind_speed_mps: number | null;
+  wind_direction_deg: number | null;
+  wave_height_m: number | null;
+  dominant_wave_period_s: number | null;
+  wave_direction_deg: number | null;
+  water_temp_c: number | null;
+}
+
+// Forecast run metadata
+export interface ForecastRun {
+  model: string;
+  run_time: string;
+  forecast_hours: number[];
+  metadata: Record<string, unknown>;
+}

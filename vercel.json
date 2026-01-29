@@ -3,10 +3,18 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "rewrites": [
+  "crons": [
     {
-      "source": "/(.*)",
-      "destination": "/"
+      "path": "/api/cron/sync-stations",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/sync-readings",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-wavewatch",
+      "schedule": "0 4,10,16,22 * * *"
     }
   ]
 }

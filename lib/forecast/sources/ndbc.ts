@@ -4,6 +4,11 @@
  */
 
 import { QualityFlag } from '@/types';
+import {
+  fetchNDBCStationList,
+  NDBCStation,
+  getMeteorologicalStations,
+} from './ndbc-stations';
 
 const NDBC_API_URL = 'https://www.ndbc.noaa.gov';
 
@@ -27,8 +32,11 @@ export interface NDBCBuoyInfo {
   name: string;
 }
 
-// Major NDBC buoy stations
-export const NDBC_BUOYS: NDBCBuoyInfo[] = [
+// Re-export NDBCStation for use by other modules
+export type { NDBCStation } from './ndbc-stations';
+
+// Fallback buoys for when dynamic fetch fails
+const FALLBACK_BUOYS: NDBCBuoyInfo[] = [
   // California Coast
   { id: '46221', lat: 33.8, lon: -118.3, name: 'Santa Monica Basin' },
   { id: '46222', lat: 33.6, lon: -117.9, name: 'San Pedro' },
@@ -42,17 +50,49 @@ export const NDBC_BUOYS: NDBCBuoyInfo[] = [
   { id: '46012', lat: 37.4, lon: -122.9, name: 'Half Moon Bay' },
   { id: '46042', lat: 36.8, lon: -122.4, name: 'Monterey Bay' },
   { id: '46011', lat: 34.9, lon: -121.0, name: 'Santa Maria' },
-
   // Hawaii
   { id: '51201', lat: 24.4, lon: -162.1, name: 'Hanalei' },
   { id: '51202', lat: 21.5, lon: -157.8, name: 'Waimea Bay' },
-
   // East Coast
   { id: '44025', lat: 40.3, lon: -73.2, name: 'Long Island' },
   { id: '44065', lat: 40.4, lon: -73.7, name: 'New York Harbor' },
   { id: '41010', lat: 28.9, lon: -78.5, name: 'Canaveral East' },
   { id: '42040', lat: 29.2, lon: -88.2, name: 'Luke Offshore' },
 ];
+
+// Cached station list converted to NDBCBuoyInfo format
+let cachedBuoyList: NDBCBuoyInfo[] | null = null;
+
+/**
+ * Get all NDBC buoys (dynamically fetched or fallback)
+ */
+export async function getNDBCBuoys(): Promise<NDBCBuoyInfo[]> {
+  if (cachedBuoyList) {
+    return cachedBuoyList;
+  }
+
+  try {
+    const stations = await fetchNDBCStationList();
+    if (stations.length > 0) {
+      // Filter to meteorological stations and convert to NDBCBuoyInfo format
+      const metStations = getMeteorologicalStations(stations);
+      cachedBuoyList = metStations.map(s => ({
+        id: s.id,
+        lat: s.lat,
+        lon: s.lon,
+        name: s.name,
+      }));
+      return cachedBuoyList;
+    }
+  } catch (error) {
+    console.error('Error fetching dynamic station list, using fallback:', error);
+  }
+
+  return FALLBACK_BUOYS;
+}
+
+// Legacy export for backward compatibility (use getNDBCBuoys() for dynamic list)
+export const NDBC_BUOYS: NDBCBuoyInfo[] = FALLBACK_BUOYS;
 
 /**
  * Check if a value is missing (NDBC missing data markers)
@@ -75,10 +115,20 @@ function determineQuality(timestamp: Date): QualityFlag {
   return 'stale';
 }
 
+// Track failed buoys to avoid repeated fetch attempts
+const failedBuoyCache = new Map<string, number>();
+const FAILED_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+
 /**
  * Fetch current buoy data from NDBC
  */
-export async function fetchNDBCBuoyData(buoyId: string): Promise<NDBCBuoyReading | null> {
+export async function fetchNDBCBuoyData(buoyId: string, silent: boolean = false): Promise<NDBCBuoyReading | null> {
+  // Check if this buoy recently failed
+  const failedAt = failedBuoyCache.get(buoyId);
+  if (failedAt && (Date.now() - failedAt) < FAILED_CACHE_DURATION) {
+    return null; // Skip recently failed buoys
+  }
+
   try {
     const response = await fetch(
       `${NDBC_API_URL}/data/realtime2/${buoyId}.txt`,
@@ -91,7 +141,8 @@ export async function fetchNDBCBuoyData(buoyId: string): Promise<NDBCBuoyReading
     );
 
     if (!response.ok) {
-      console.error(`NDBC API error for buoy ${buoyId}: ${response.statusText}`);
+      // Cache the failure to avoid repeated attempts
+      failedBuoyCache.set(buoyId, Date.now());
       return null;
     }
 
@@ -107,7 +158,6 @@ export async function fetchNDBCBuoyData(buoyId: string): Promise<NDBCBuoyReading
     const data = lines[2].trim().split(/\s+/);
 
     if (data.length < 15) {
-      console.error(`NDBC buoy ${buoyId}: Insufficient data fields`);
       return null;
     }
 
@@ -144,7 +194,8 @@ export async function fetchNDBCBuoyData(buoyId: string): Promise<NDBCBuoyReading
       quality,
     };
   } catch (error) {
-    console.error(`Error fetching NDBC buoy ${buoyId}:`, error);
+    // Cache the failure to avoid repeated attempts
+    failedBuoyCache.set(buoyId, Date.now());
     return null;
   }
 }
@@ -168,7 +219,29 @@ function toRad(degrees: number): number {
 }
 
 /**
- * Find nearest buoys to a location
+ * Find nearest buoys to a location (async version using dynamic list)
+ */
+export async function findNearestBuoysAsync(
+  lat: number,
+  lon: number,
+  maxDistance: number = 200,
+  count: number = 5
+): Promise<NDBCBuoyInfo[]> {
+  const buoys = await getNDBCBuoys();
+  const buoysWithDistance = buoys.map(buoy => ({
+    ...buoy,
+    distance: calculateDistance(lat, lon, buoy.lat, buoy.lon),
+  }));
+
+  return buoysWithDistance
+    .filter(b => b.distance < maxDistance)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, count);
+}
+
+/**
+ * Find nearest buoys to a location (sync version using fallback list)
+ * @deprecated Use findNearestBuoysAsync for access to full station list
  */
 export function findNearestBuoys(
   lat: number,
@@ -185,4 +258,49 @@ export function findNearestBuoys(
     .filter(b => b.distance < maxDistance)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, count);
+}
+
+export type BuoyDataField = 'waveDirection' | 'windDirection' | 'waveHeight' |
+  'dominantWavePeriod' | 'averageWavePeriod' | 'windSpeed' |
+  'waterTemperature' | 'airTemperature';
+
+export interface NearestBuoyWithDataResult {
+  buoy: NDBCBuoyInfo;
+  data: NDBCBuoyReading;
+  distance: number;
+}
+
+/**
+ * Find the single nearest buoy that has valid data for a specific field
+ * Searches with a wider radius to find any buoy with the requested data
+ */
+export async function findNearestBuoyWithData(
+  lat: number,
+  lon: number,
+  field: BuoyDataField,
+  maxDistance: number = 500
+): Promise<NearestBuoyWithDataResult | null> {
+  // Get all buoys sorted by distance
+  const buoys = await getNDBCBuoys();
+  const buoysWithDistance = buoys
+    .map(buoy => ({
+      ...buoy,
+      distance: calculateDistance(lat, lon, buoy.lat, buoy.lon),
+    }))
+    .filter(b => b.distance <= maxDistance)
+    .sort((a, b) => a.distance - b.distance);
+
+  // Try each buoy in order until we find one with valid data
+  for (const buoy of buoysWithDistance) {
+    const data = await fetchNDBCBuoyData(buoy.id);
+    if (data && data[field] !== undefined) {
+      return {
+        buoy: { id: buoy.id, lat: buoy.lat, lon: buoy.lon, name: buoy.name },
+        data,
+        distance: buoy.distance,
+      };
+    }
+  }
+
+  return null;
 }
