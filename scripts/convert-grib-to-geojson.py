@@ -2,18 +2,28 @@
 """
 Convert WaveWatch III GRIB2 data to GeoJSON format.
 
-Input: gfswave.t12z.global.0p25.f000.grib2
-Output: public/data/wave-data.geojson
+Processes all forecast hours in data/grib/ directory.
+
+Input:  data/grib/gfswave.*.global.0p25.f*.grib2
+Output: public/data/wave-data-f000.geojson
+        public/data/wave-data-f024.geojson
+        ... etc
+        public/data/wave-data.geojson (copy of f000 for backward compatibility)
 """
 
+import glob
 import json
 import os
-import numpy as np
+import re
+import shutil
+from datetime import datetime
+
 import cfgrib
+import numpy as np
 
 # Configuration
-GRIB_FILE = "gfswave.t12z.global.0p25.f000.grib2"
-OUTPUT_FILE = "public/data/wave-data.geojson"
+GRIB_DIR = "data/grib"
+OUTPUT_DIR = "public/data"
 SAMPLE_STEP = 24  # Every 6° (grid is 0.25°, so 6/0.25 = 24)
 MIN_SWELL_HEIGHT = 0.1  # Minimum swell height to include
 
@@ -32,44 +42,49 @@ def convert_longitude(lon):
     return lon
 
 
-def main():
-    # Change to project directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.dirname(script_dir)
-    os.chdir(project_dir)
+def extract_forecast_hour(filename):
+    """Extract forecast hour from filename like gfswave.t18z.global.0p25.f024.grib2"""
+    match = re.search(r'\.f(\d{3})\.grib2$', filename)
+    if match:
+        return int(match.group(1))
+    return None
 
-    print(f"Loading GRIB2 file: {GRIB_FILE}")
+
+def convert_grib_file(grib_path, output_path, file_num, total_files):
+    """Convert a single GRIB file to GeoJSON."""
+    filename = os.path.basename(grib_path)
+    forecast_hour = extract_forecast_hour(filename)
+
+    print(f"Processing f{forecast_hour:03d} ({file_num}/{total_files})...")
 
     # Load datasets
-    datasets = cfgrib.open_datasets(GRIB_FILE)
-    print(f"Loaded {len(datasets)} datasets")
+    datasets = cfgrib.open_datasets(grib_path)
 
     # Dataset 0: swell partitions (swdir, shts, mpts)
     # Dataset 1: main wave data (swh, ws, wdir)
     ds_swell = datasets[0]
     ds_wave = datasets[1]
 
+    # Extract timestamps
+    reference_time = str(ds_wave.time.values)[:19] + "Z"
+    valid_time = str(ds_wave.valid_time.values)[:19] + "Z"
+
     # Get coordinate arrays
     lats = ds_wave.latitude.values
     lons = ds_wave.longitude.values
 
     # Get data arrays
-    swh = ds_wave.swh.values  # Significant wave height
-    ws = ds_wave.ws.values  # Wind speed
-    wdir = ds_wave.wdir.values  # Wind direction
+    swh = ds_wave.swh.values
+    ws = ds_wave.ws.values
+    wdir = ds_wave.wdir.values
+    shww = ds_wave.shww.values
+    mpww = ds_wave.mpww.values
+    wvdir = ds_wave.wvdir.values
 
-    # Wind wave data
-    shww = ds_wave.shww.values  # Significant height of wind waves
-    mpww = ds_wave.mpww.values  # Mean period of wind waves
-    wvdir = ds_wave.wvdir.values  # Direction of wind waves
-
-    # Swell partition data (3 partitions)
-    swdir = ds_swell.swdir.values  # Swell direction [partition, lat, lon]
-    shts = ds_swell.shts.values  # Swell height
-    mpts = ds_swell.mpts.values  # Mean wave period
-
-    print(f"Grid size: {len(lats)} x {len(lons)}")
-    print(f"Sampling every {SAMPLE_STEP} points (every {SAMPLE_STEP * 0.25}°)")
+    # Swell partition data
+    swdir = ds_swell.swdir.values
+    shts = ds_swell.shts.values
+    mpts = ds_swell.mpts.values
 
     features = []
     skipped_land = 0
@@ -80,7 +95,6 @@ def main():
             lat = float(lats[lat_idx])
             lon = convert_longitude(float(lons[lon_idx]))
 
-            # Get significant wave height
             wave_height = swh[lat_idx, lon_idx]
 
             # Skip land (NaN values)
@@ -90,12 +104,11 @@ def main():
 
             # Build swells array from partitions
             swells = []
-            for p in range(3):  # 3 swell partitions
+            for p in range(3):
                 height = shts[p, lat_idx, lon_idx]
                 period = mpts[p, lat_idx, lon_idx]
                 direction = swdir[p, lat_idx, lon_idx]
 
-                # Skip if height is NaN or too small
                 if np.isnan(height) or height < MIN_SWELL_HEIGHT:
                     continue
 
@@ -105,30 +118,22 @@ def main():
                     "direction": int(direction) if not np.isnan(direction) else 0
                 })
 
-            # Get wind data
-            wind_speed = ws[lat_idx, lon_idx]
-            wind_dir = wdir[lat_idx, lon_idx]
-
+            # Wind data
             wind = {
-                "speed": round1(wind_speed) if not np.isnan(wind_speed) else 0,
-                "direction": int(wind_dir) if not np.isnan(wind_dir) else 0
+                "speed": round1(ws[lat_idx, lon_idx]) if not np.isnan(ws[lat_idx, lon_idx]) else 0,
+                "direction": int(wdir[lat_idx, lon_idx]) if not np.isnan(wdir[lat_idx, lon_idx]) else 0
             }
 
-            # Get wind wave data
+            # Wind wave data
             ww_height = shww[lat_idx, lon_idx]
-            ww_period = mpww[lat_idx, lon_idx]
-            ww_dir = wvdir[lat_idx, lon_idx]
-
-            # Build windWaves object (None if data missing)
             wind_waves = None
             if not np.isnan(ww_height) and ww_height > 0:
                 wind_waves = {
                     "height": round1(ww_height),
-                    "period": round1(ww_period) if not np.isnan(ww_period) else None,
-                    "direction": int(ww_dir) if not np.isnan(ww_dir) else None
+                    "period": round1(mpww[lat_idx, lon_idx]) if not np.isnan(mpww[lat_idx, lon_idx]) else None,
+                    "direction": int(wvdir[lat_idx, lon_idx]) if not np.isnan(wvdir[lat_idx, lon_idx]) else None
                 }
 
-            # Create feature
             feature = {
                 "type": "Feature",
                 "geometry": {
@@ -145,26 +150,82 @@ def main():
 
             features.append(feature)
 
-    # Create GeoJSON
+    # Create GeoJSON with metadata
     geojson = {
         "type": "FeatureCollection",
+        "metadata": {
+            "forecastHour": forecast_hour,
+            "validTime": valid_time,
+            "referenceTime": reference_time,
+            "generatedAt": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        },
         "features": features
     }
 
     # Write output
-    os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
-    with open(OUTPUT_FILE, 'w') as f:
-        json.dump(geojson, f, indent=2)
+    with open(output_path, 'w') as f:
+        json.dump(geojson, f)
+
+    return len(features), forecast_hour
+
+
+def main():
+    # Change to project directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.path.dirname(script_dir)
+    os.chdir(project_dir)
+
+    # Find all GRIB files
+    grib_pattern = os.path.join(GRIB_DIR, "gfswave.*.global.0p25.f*.grib2")
+    grib_files = sorted(glob.glob(grib_pattern))
+
+    if not grib_files:
+        print(f"No GRIB files found matching: {grib_pattern}")
+        return
+
+    print(f"Found {len(grib_files)} GRIB files in {GRIB_DIR}/")
+    print(f"Output directory: {OUTPUT_DIR}/")
+    print("=" * 50)
+
+    # Create output directory
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    total_features = 0
+    f000_output = None
+
+    # Process each file
+    for i, grib_file in enumerate(grib_files, 1):
+        forecast_hour = extract_forecast_hour(grib_file)
+        output_file = os.path.join(OUTPUT_DIR, f"wave-data-f{forecast_hour:03d}.geojson")
+
+        features_count, fhour = convert_grib_file(grib_file, output_file, i, len(grib_files))
+        total_features += features_count
+
+        # Track f000 for backward compatibility copy
+        if forecast_hour == 0:
+            f000_output = output_file
+
+    # Create backward-compatible wave-data.geojson (copy of f000)
+    if f000_output:
+        legacy_output = os.path.join(OUTPUT_DIR, "wave-data.geojson")
+        shutil.copy(f000_output, legacy_output)
+        print(f"\nCreated {legacy_output} (copy of f000)")
 
     # Print summary
-    wave_heights = [f["properties"]["waveHeight"] for f in features]
-    print(f"\n{'='*40}")
-    print(f"Conversion complete!")
-    print(f"{'='*40}")
-    print(f"Points generated: {len(features)}")
-    print(f"Points skipped (land): {skipped_land}")
-    print(f"Wave height range: {min(wave_heights):.1f}m - {max(wave_heights):.1f}m")
-    print(f"Output: {OUTPUT_FILE}")
+    print("\n" + "=" * 50)
+    print("Conversion Complete!")
+    print("=" * 50)
+    print(f"Files processed:    {len(grib_files)}")
+    print(f"Features per file:  ~{total_features // len(grib_files)}")
+    print(f"Total features:     {total_features}")
+    print(f"Output directory:   {OUTPUT_DIR}/")
+
+    # List output files
+    print("\nOutput files:")
+    output_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "wave-data*.geojson")))
+    for f in output_files:
+        size_kb = os.path.getsize(f) / 1024
+        print(f"  {os.path.basename(f):30} {size_kb:6.1f} KB")
 
 
 if __name__ == "__main__":

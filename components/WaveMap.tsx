@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import TimeSlider from './TimeSlider';
 
 // Compass directions for degree conversion
 const COMPASS_DIRECTIONS = [
@@ -31,7 +32,6 @@ function formatPopupContent(properties: any): string {
   const wind = typeof properties.wind === 'string'
     ? JSON.parse(properties.wind)
     : properties.wind;
-  const waveHeight = properties.waveHeight;
 
   // Build swells HTML
   let swellsHtml = '';
@@ -64,9 +64,6 @@ function formatPopupContent(properties: any): string {
   return `
     <div style="font-family: system-ui, sans-serif; font-size: 13px; line-height: 1.4;">
       <div style="font-weight: 600; margin-bottom: 8px; font-size: 14px;">Wave Conditions</div>
-      <div style="margin-bottom: 8px;">
-        <div style="font-weight: 500; color: #666;">Total: ${waveHeight}m</div>
-      </div>
       ${swellsHtml}
       ${windWavesHtml}
       <div>
@@ -77,6 +74,23 @@ function formatPopupContent(properties: any): string {
   `;
 }
 
+interface ForecastMetadata {
+  forecastHour: number;
+  validTime: string;
+  referenceTime: string;
+  generatedAt: string;
+}
+
+interface GeoJSONData {
+  type: string;
+  metadata?: ForecastMetadata;
+  features: Array<{
+    type: string;
+    geometry: { type: string; coordinates: [number, number] };
+    properties: any;
+  }>;
+}
+
 /**
  * Simple wave visualization map.
  * Displays wave height data as colored circles on a MapLibre map.
@@ -85,6 +99,87 @@ export default function WaveMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
+  const selectedPointRef = useRef<{ lng: number; lat: number } | null>(null);
+
+  // Forecast state
+  const [currentHour, setCurrentHour] = useState(0);
+  const [metadata, setMetadata] = useState<ForecastMetadata | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentData, setCurrentData] = useState<GeoJSONData | null>(null);
+
+  // Load GeoJSON data for a specific forecast hour
+  const loadForecastData = useCallback(async (hour: number) => {
+    // Ensure map is ready
+    if (!map.current) return;
+
+    const hourStr = hour.toString().padStart(3, '0');
+    const url = `/data/wave-data-f${hourStr}.geojson`;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(url);
+
+      // Check for HTTP errors
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Verify data structure
+      if (!data || !data.features) {
+        throw new Error('Invalid GeoJSON data');
+      }
+
+      // Update metadata
+      if (data.metadata) {
+        setMetadata(data.metadata);
+      }
+
+      // Store current data for popup updates
+      setCurrentData(data);
+
+      // Update map source (check map still exists after async)
+      if (map.current) {
+        const source = map.current.getSource('waves') as maplibregl.GeoJSONSource;
+        if (source) {
+          source.setData(data);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load forecast data for f${hourStr}:`, error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Update popup content when forecast data changes
+  useEffect(() => {
+    const selectedPoint = selectedPointRef.current;
+
+    // Skip if no point selected, no popup, or no data
+    if (!selectedPoint || !popup.current || !currentData) return;
+
+    // Skip if popup is not open
+    if (!popup.current.isOpen()) return;
+
+    // Find the feature at selected coordinates (use approximate matching for floating point)
+    const feature = currentData.features.find(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      return Math.abs(lng - selectedPoint.lng) < 0.01 && Math.abs(lat - selectedPoint.lat) < 0.01;
+    });
+
+    if (feature) {
+      popup.current.setHTML(formatPopupContent(feature.properties));
+    }
+  }, [currentData]);
+
+  // Handle forecast hour change from slider
+  const handleHourChange = useCallback((hour: number) => {
+    setCurrentHour(hour);
+    loadForecastData(hour);
+  }, [loadForecastData]);
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -104,65 +199,92 @@ export default function WaveMap() {
       maxWidth: '280px',
     });
 
-    map.current.on('load', () => {
+    map.current.on('load', async () => {
       if (!map.current) return;
 
-      // Add wave data source
-      map.current.addSource('waves', {
-        type: 'geojson',
-        data: '/data/wave-data.geojson',
-      });
+      try {
+        // Load initial data (f000)
+        const response = await fetch('/data/wave-data-f000.geojson');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
 
-      // Add circle layer for wave visualization
-      map.current.addLayer({
-        id: 'wave-circles',
-        type: 'circle',
-        source: 'waves',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': [
-            'interpolate',
-            ['linear'],
-            ['get', 'waveHeight'],
-            0, '#3b82f6',
-            3, '#eab308',
-            6, '#ef4444',
-            10, '#7f1d1d',
-          ],
-          'circle-opacity': 0.7,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-opacity': 0.5,
-        },
-      });
+        // Set initial metadata and data
+        if (data.metadata) {
+          setMetadata(data.metadata);
+        }
+        setCurrentData(data);
 
-      // Click handler for wave circles
-      map.current.on('click', 'wave-circles', (e) => {
-        if (!map.current || !popup.current || !e.features || e.features.length === 0) return;
+        // Add wave data source
+        map.current.addSource('waves', {
+          type: 'geojson',
+          data: data,
+        });
 
-        const feature = e.features[0];
-        const coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number];
-        const properties = feature.properties;
+        // Add circle layer for wave visualization
+        map.current.addLayer({
+          id: 'wave-circles',
+          type: 'circle',
+          source: 'waves',
+          paint: {
+            'circle-radius': 6,
+            'circle-color': [
+              'interpolate',
+              ['linear'],
+              ['get', 'waveHeight'],
+              0, '#3b82f6',
+              3, '#eab308',
+              6, '#ef4444',
+              10, '#7f1d1d',
+            ],
+            'circle-opacity': 0.7,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-opacity': 0.5,
+          },
+        });
 
-        // Ensure popup appears at clicked point even if map is zoomed out
-        while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-          coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+        // Click handler for wave circles
+        map.current.on('click', 'wave-circles', (e) => {
+          if (!map.current || !popup.current || !e.features || e.features.length === 0) return;
+
+          const feature = e.features[0];
+          const originalCoords = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
+          const displayCoords: [number, number] = [...originalCoords];
+
+          // Store the original coordinates for data lookup
+          selectedPointRef.current = { lng: originalCoords[0], lat: originalCoords[1] };
+
+          // Ensure popup appears at clicked point even if map is zoomed out
+          while (Math.abs(e.lngLat.lng - displayCoords[0]) > 180) {
+            displayCoords[0] += e.lngLat.lng > displayCoords[0] ? 360 : -360;
+          }
+
+          popup.current
+            .setLngLat(displayCoords)
+            .setHTML(formatPopupContent(feature.properties))
+            .addTo(map.current);
+        });
+
+        // Clear selected point when popup closes
+        if (popup.current) {
+          popup.current.on('close', () => {
+            selectedPointRef.current = null;
+          });
         }
 
-        popup.current
-          .setLngLat(coordinates)
-          .setHTML(formatPopupContent(properties))
-          .addTo(map.current);
-      });
+        // Change cursor on hover
+        map.current.on('mouseenter', 'wave-circles', () => {
+          if (map.current) map.current.getCanvas().style.cursor = 'pointer';
+        });
 
-      // Change cursor on hover
-      map.current.on('mouseenter', 'wave-circles', () => {
-        if (map.current) map.current.getCanvas().style.cursor = 'pointer';
-      });
-
-      map.current.on('mouseleave', 'wave-circles', () => {
-        if (map.current) map.current.getCanvas().style.cursor = '';
-      });
+        map.current.on('mouseleave', 'wave-circles', () => {
+          if (map.current) map.current.getCanvas().style.cursor = '';
+        });
+      } catch (error) {
+        console.error('Failed to load initial wave data:', error);
+      }
     });
 
     // Add navigation controls
@@ -184,7 +306,7 @@ export default function WaveMap() {
       {/* Legend */}
       <div style={{
         position: 'absolute',
-        bottom: 20,
+        bottom: 100,
         left: 20,
         background: 'white',
         padding: '12px 16px',
@@ -207,6 +329,15 @@ export default function WaveMap() {
           <span>6m+</span>
         </div>
       </div>
+
+      {/* Time Slider */}
+      <TimeSlider
+        currentHour={currentHour}
+        validTime={metadata?.validTime ?? null}
+        referenceTime={metadata?.referenceTime ?? null}
+        isLoading={isLoading}
+        onChange={handleHourChange}
+      />
     </div>
   );
 }

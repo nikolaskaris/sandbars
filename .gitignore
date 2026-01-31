@@ -1,1 +1,4 @@
 node_modules
+
+# GRIB data files (large, downloaded on demand)
+data/grib/
