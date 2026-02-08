@@ -56,6 +56,10 @@ export async function GET(request: Request) {
         p.lon >= minLon && p.lon <= maxLon
       );
 
+      // Sample to verify we're returning correct data for this hour
+      const sample = filteredData[0];
+      console.log(`API /waves/grid: hour=${forecastHour}, ${filteredData.length} points, sample: h=${sample?.waveHeight?.toFixed(2)}, dir=${sample?.waveDirection?.toFixed(0)}`);
+
       return NextResponse.json({
         grid: filteredData,
         pointCount: filteredData.length,

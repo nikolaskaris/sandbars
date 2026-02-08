@@ -8,6 +8,9 @@ node_modules
 # GRIB data files (large, downloaded on demand)
 data/grib/
 
+# GeoJSON data files (served from Supabase Storage)
+public/data/*.geojson
+
 # Playwright
 playwright-report/
 test-results/

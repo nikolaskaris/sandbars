@@ -1,18 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import TimeSlider from './TimeSlider';
+import SearchBar from './SearchBar';
+import SpotPanel from './SpotPanel';
+import VectorOverlay from './VectorOverlay';
+import LayerToggle, { MapLayer } from './LayerToggle';
+import { DATA_URLS } from '@/lib/config';
+import {
+  SwellData,
+  WindData,
+  WindWaveData,
+  WaveFeatureProperties,
+  ForecastMetadata,
+  GeoJSONFeature,
+  GeoJSONData,
+  degreesToCompass,
+  formatTime,
+  parseJsonProperty,
+} from '@/lib/wave-utils';
 
 // =============================================================================
 // Constants & Styling (Issue #11)
 // =============================================================================
-
-const COMPASS_DIRECTIONS = [
-  'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'
-];
 
 const LEGEND_STYLES = {
   container: {
@@ -63,10 +75,8 @@ const POPUP_STYLES = {
   container: 'font-family: system-ui, sans-serif; font-size: 13px; line-height: 1.4;',
   title: 'font-weight: 600; margin-bottom: 4px; font-size: 14px;',
   subtitle: 'color: #666; margin-bottom: 8px; font-size: 12px;',
-  sectionTitle: 'font-weight: 500; color: #666; margin-bottom: 4px;',
   sectionLabel: 'font-weight: 500; color: #666;',
   listItem: 'margin: 4px 0;',
-  section: 'margin-bottom: 8px;',
   noData: 'color: #999;',
 };
 
@@ -79,32 +89,67 @@ const COLORS = {
 };
 
 // =============================================================================
-// Type Definitions (Issue #10)
+// Layer Configurations
 // =============================================================================
 
-interface SwellData {
-  height: number;
-  period: number;
-  direction: number;
+const LAYER_CONFIGS: Record<MapLayer, {
+  property: string;
+  colorStops: (string | number)[];
+  legendTitle: string;
+  legendGradient: string;
+  legendLabels: [string, string, string];
+}> = {
+  waveHeight: {
+    property: 'waveHeight',
+    colorStops: [0, '#3b82f6', 3, '#eab308', 6, '#ef4444', 10, '#7f1d1d'],
+    legendTitle: 'Wave Height',
+    legendGradient: 'linear-gradient(to right, #3b82f6, #eab308, #ef4444)',
+    legendLabels: ['0m', '3m', '6m+'],
+  },
+  wavePeriod: {
+    property: 'wavePeriod',
+    colorStops: [5, '#87CEEB', 12, '#22c55e', 20, '#7c3aed'],
+    legendTitle: 'Wave Period',
+    legendGradient: 'linear-gradient(to right, #87CEEB, #22c55e, #7c3aed)',
+    legendLabels: ['5s', '12s', '20s+'],
+  },
+  wind: {
+    property: 'windSpeed',
+    colorStops: [0, '#d1d5db', 10, '#22c55e', 20, '#ef4444'],
+    legendTitle: 'Wind Speed',
+    legendGradient: 'linear-gradient(to right, #d1d5db, #22c55e, #ef4444)',
+    legendLabels: ['0 m/s', '10', '20+'],
+  },
+};
+
+function getCircleColorExpression(layer: MapLayer): maplibregl.ExpressionSpecification {
+  const config = LAYER_CONFIGS[layer];
+  return [
+    'interpolate',
+    ['linear'],
+    ['get', config.property],
+    ...config.colorStops,
+  ] as maplibregl.ExpressionSpecification;
 }
 
-interface WindData {
-  speed: number;
-  direction: number;
+/**
+ * Add top-level wavePeriod and windSpeed properties so MapLibre expressions can access them.
+ * Mutates features in-place since the data was just fetched.
+ */
+function enrichWaveData(data: GeoJSONData<WaveFeatureProperties>): void {
+  for (const feature of data.features) {
+    const props = feature.properties;
+    const swells = parseJsonProperty<SwellData[]>(props.swells);
+    const wind = parseJsonProperty<WindData>(props.wind);
+    const extra = props as unknown as Record<string, unknown>;
+    extra.wavePeriod = swells?.[0]?.period ?? 0;
+    extra.windSpeed = wind?.speed ?? 0;
+  }
 }
 
-interface WindWaveData {
-  height: number;
-  period?: number;
-  direction?: number;
-}
-
-interface WaveFeatureProperties {
-  waveHeight: number;
-  swells: SwellData[] | string;
-  windWaves: WindWaveData | string | null;
-  wind: WindData | string;
-}
+// =============================================================================
+// Local Type Definitions
+// =============================================================================
 
 interface BuoyFeatureProperties {
   station_id: string;
@@ -124,51 +169,7 @@ interface BuoyFeatureProperties {
   observation_time: string | null;
 }
 
-interface ForecastMetadata {
-  source: string;
-  model_run: string;
-  forecast_hour: number;
-  valid_time: string;
-  generated_at: string;
-  grid_resolution: string;
-  point_count: number;
-}
-
-interface GeoJSONFeature<T> {
-  type: string;
-  geometry: { type: string; coordinates: [number, number] };
-  properties: T;
-}
-
-interface GeoJSONData<T = WaveFeatureProperties> {
-  type: string;
-  metadata?: ForecastMetadata;
-  features: GeoJSONFeature<T>[];
-}
-
 type PopupType = 'wave' | 'buoy' | null;
-
-// =============================================================================
-// Utility Functions
-// =============================================================================
-
-function degreesToCompass(degrees: number): string {
-  const index = Math.round(degrees / 22.5) % 16;
-  return COMPASS_DIRECTIONS[index];
-}
-
-function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-function parseJsonProperty<T>(value: T | string): T {
-  return typeof value === 'string' ? JSON.parse(value) : value;
-}
 
 // =============================================================================
 // Popup HTML Builders (Issue #8 - Shared utilities)
@@ -186,15 +187,6 @@ function popupSubtitle(text: string): string {
   return `<div style="${POPUP_STYLES.subtitle}">${text}</div>`;
 }
 
-function popupSection(title: string, content: string): string {
-  return `
-    <div style="${POPUP_STYLES.section}">
-      <div style="${POPUP_STYLES.sectionTitle}">${title}</div>
-      ${content}
-    </div>
-  `;
-}
-
 function popupInlineField(label: string, value: string): string {
   return `
     <div style="${POPUP_STYLES.listItem}">
@@ -206,59 +198,6 @@ function popupInlineField(label: string, value: string): string {
 function formatDirectionString(direction: number | null | undefined): string {
   if (direction == null) return '';
   return `from ${direction}° (${degreesToCompass(direction)})`;
-}
-
-// =============================================================================
-// Popup Formatters
-// =============================================================================
-
-function formatForecastPopup(properties: WaveFeatureProperties, validTime: string | null): string {
-  const swells = parseJsonProperty<SwellData[]>(properties.swells);
-  const windWaves = parseJsonProperty<WindWaveData | null>(properties.windWaves);
-  const wind = parseJsonProperty<WindData>(properties.wind);
-
-  // Build swells HTML
-  let swellsHtml = '';
-  if (swells && swells.length > 0) {
-    const items = swells.map(swell => {
-      const compass = degreesToCompass(swell.direction);
-      return `<div style="${POPUP_STYLES.listItem}">• ${swell.height}m @ ${swell.period}s from ${swell.direction}° (${compass})</div>`;
-    }).join('');
-    swellsHtml = popupSection('Swells:', items);
-  }
-
-  // Build wind waves HTML
-  let windWavesHtml = '';
-  if (windWaves && windWaves.height > 0.1) {
-    const dirStr = formatDirectionString(windWaves.direction);
-    const periodStr = windWaves.period ? `@ ${windWaves.period}s` : '';
-    const content = `<div style="${POPUP_STYLES.listItem}">• ${windWaves.height}m ${periodStr} ${dirStr}</div>`;
-    windWavesHtml = popupSection('Wind Waves:', content);
-  }
-
-  // Build wind HTML
-  let windHtml = '';
-  if (wind && wind.speed != null) {
-    const dirStr = formatDirectionString(wind.direction);
-    const content = `<div style="${POPUP_STYLES.listItem}">${wind.speed} m/s ${dirStr}</div>`;
-    windHtml = popupSection('Wind:', content);
-  }
-
-  // Format valid time
-  const timeDisplay = validTime ? formatTime(validTime) : '';
-  const dateDisplay = validTime ? new Date(validTime).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }) : '';
-
-  return wrapPopup(`
-    ${popupTitle('Wave Forecast')}
-    ${popupSubtitle(`Forecast: ${dateDisplay} ${timeDisplay}`)}
-    ${swellsHtml}
-    ${windWavesHtml}
-    ${windHtml}
-  `);
 }
 
 function formatBuoyPopup(properties: BuoyFeatureProperties): string {
@@ -407,22 +346,62 @@ function setupLayerClickHandler(
   });
 }
 
+function findNearestWaveFeature(
+  features: GeoJSONFeature<WaveFeatureProperties>[],
+  lat: number,
+  lng: number,
+  maxDistance = 10
+): GeoJSONFeature<WaveFeatureProperties> | null {
+  let nearest: GeoJSONFeature<WaveFeatureProperties> | null = null;
+  let minDist = Infinity;
+
+  for (const feature of features) {
+    const [fLng, fLat] = feature.geometry.coordinates;
+    const dx = fLng - lng;
+    const dy = fLat - lat;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = feature;
+    }
+  }
+
+  return minDist <= maxDistance ? nearest : null;
+}
+
+function formatCoordinateLabel(lat: number, lng: number): string {
+  const latStr = `${Math.abs(lat).toFixed(2)}\u00B0${lat >= 0 ? 'N' : 'S'}`;
+  const lngStr = `${Math.abs(lng).toFixed(2)}\u00B0${lng >= 0 ? 'E' : 'W'}`;
+  return `Location: ${latStr}, ${lngStr}`;
+}
+
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export default function WaveMap() {
+interface WaveMapProps {
+  onFavoritesChange?: () => void;
+  initialSpot?: { lat: number; lng: number; name: string } | null;
+}
+
+export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps = {}) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
   const selectedPointRef = useRef<{ lng: number; lat: number } | null>(null);
   const popupTypeRef = useRef<PopupType>(null);
+  const currentDataRef = useRef<GeoJSONData | null>(null);
+  const metadataRef = useRef<ForecastMetadata | null>(null);
 
   // Forecast state
   const [currentHour, setCurrentHour] = useState(0);
   const [metadata, setMetadata] = useState<ForecastMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentData, setCurrentData] = useState<GeoJSONData | null>(null);
+  const [waveError, setWaveError] = useState<string | null>(null);
+
+  // Active data layer
+  const [activeLayer, setActiveLayer] = useState<MapLayer>('waveHeight');
 
   // Layer visibility
   const [showBuoys, setShowBuoys] = useState(true);
@@ -431,14 +410,45 @@ export default function WaveMap() {
   const [buoyError, setBuoyError] = useState<string | null>(null);
   const [buoyLastUpdated, setBuoyLastUpdated] = useState<Date | null>(null);
 
+  // Spot panel state
+  const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const selectedSpotRef = useRef(selectedSpot);
+  useEffect(() => { selectedSpotRef.current = selectedSpot; }, [selectedSpot]);
+
+  // Handle initialSpot from navigation
+  useEffect(() => {
+    if (initialSpot) {
+      setSelectedSpot(initialSpot);
+      if (map.current) {
+        map.current.flyTo({ center: [initialSpot.lng, initialSpot.lat], zoom: 6, duration: 2000 });
+      }
+    }
+  }, [initialSpot]);
+
+  // Keep refs in sync with state so map click handler has latest data
+  useEffect(() => { currentDataRef.current = currentData; }, [currentData]);
+  useEffect(() => { metadataRef.current = metadata; }, [metadata]);
+
+  // Derive vector data from selected spot + current forecast data
+  const vectorData = useMemo(() => {
+    if (!selectedSpot || !currentData) return null;
+    const nearest = findNearestWaveFeature(currentData.features, selectedSpot.lat, selectedSpot.lng);
+    if (!nearest) return null;
+    return {
+      swells: parseJsonProperty<SwellData[]>(nearest.properties.swells),
+      windWaves: parseJsonProperty<WindWaveData | null>(nearest.properties.windWaves),
+      wind: parseJsonProperty<WindData>(nearest.properties.wind),
+    };
+  }, [selectedSpot, currentData]);
+
   // Load GeoJSON data for a specific forecast hour
   const loadForecastData = useCallback(async (hour: number) => {
     if (!map.current) return;
 
-    const hourStr = hour.toString().padStart(3, '0');
-    const url = `/data/wave-data-f${hourStr}.geojson`;
+    const url = DATA_URLS.waveData(hour);
 
     setIsLoading(true);
+    setWaveError(null);
 
     try {
       const response = await fetch(url);
@@ -450,6 +460,8 @@ export default function WaveMap() {
       if (!data || !data.features) {
         throw new Error('Invalid GeoJSON data');
       }
+
+      enrichWaveData(data);
 
       if (data.metadata) {
         setMetadata(data.metadata);
@@ -463,39 +475,37 @@ export default function WaveMap() {
         }
       }
     } catch (error) {
-      console.error(`Failed to load forecast data for f${hourStr}:`, error);
+      console.error(`Failed to load forecast data for hour ${hour}:`, error);
+      setWaveError('Unable to load forecast data');
     } finally {
       setIsLoading(false);
     }
   }, []);
-
-  // Update popup content when forecast data changes (only for wave popups)
-  useEffect(() => {
-    const selectedPoint = selectedPointRef.current;
-    if (!selectedPoint || !popup.current || !currentData) return;
-    if (!popup.current.isOpen() || popupTypeRef.current !== 'wave') return;
-
-    const feature = currentData.features.find(f => {
-      const [lng, lat] = f.geometry.coordinates;
-      return Math.abs(lng - selectedPoint.lng) < 0.01 && Math.abs(lat - selectedPoint.lat) < 0.01;
-    });
-
-    if (feature) {
-      popup.current.setHTML(formatForecastPopup(feature.properties, metadata?.valid_time ?? null));
-    }
-  }, [currentData, metadata]);
 
   const handleHourChange = useCallback((hour: number) => {
     setCurrentHour(hour);
     loadForecastData(hour);
   }, [loadForecastData]);
 
+  // Handle location search result
+  const handleLocationSelect = useCallback((lat: number, lon: number, name: string) => {
+    if (!map.current) return;
+
+    map.current.flyTo({
+      center: [lon, lat],
+      zoom: 6,
+      duration: 2000,
+    });
+
+    setSelectedSpot({ lat, lng: lon, name });
+  }, []);
+
   // Load buoy observation data
   const loadBuoyData = useCallback(async () => {
     if (!map.current) return;
 
     try {
-      const response = await fetch('/data/buoy-observations.geojson');
+      const response = await fetch(DATA_URLS.buoyObservations);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -535,6 +545,12 @@ export default function WaveMap() {
     }
   }, [showBuoys]);
 
+  // Update circle color when active layer changes
+  useEffect(() => {
+    if (!map.current || !map.current.getLayer('wave-circles')) return;
+    map.current.setPaintProperty('wave-circles', 'circle-color', getCircleColorExpression(activeLayer));
+  }, [activeLayer]);
+
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -544,25 +560,31 @@ export default function WaveMap() {
       style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
       center: [0, 0],
       zoom: 2,
+      doubleClickZoom: true,
     });
+
+    // Expose map instance for E2E testing
+    if (typeof window !== 'undefined') {
+      (window as unknown as { map: maplibregl.Map }).map = map.current;
+    }
 
     popup.current = new maplibregl.Popup({
       closeButton: true,
       closeOnClick: false,
-      maxWidth: '280px',
+      maxWidth: '350px',
     });
 
     map.current.on('load', async () => {
       if (!map.current || !popup.current) return;
 
       try {
-        // Parallel fetch both data sources (Issue #17)
+        // Parallel fetch both data sources from Supabase Storage (Issue #17)
         const [waveResult, buoyResult] = await Promise.allSettled([
-          fetch('/data/wave-data-f000.geojson').then(r => {
+          fetch(DATA_URLS.waveData(0)).then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
           }),
-          fetch('/data/buoy-observations.geojson').then(r => {
+          fetch(DATA_URLS.buoyObservations).then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
             return r.json();
           }),
@@ -571,23 +593,17 @@ export default function WaveMap() {
         // Process wave data
         if (waveResult.status === 'fulfilled') {
           const waveData = waveResult.value;
+          enrichWaveData(waveData);
           if (waveData.metadata) {
             setMetadata(waveData.metadata);
           }
           setCurrentData(waveData);
+          setWaveError(null);
 
           setupWaveLayer(map.current, waveData);
-          setupLayerClickHandler(
-            map.current,
-            popup.current,
-            'wave-circles',
-            'wave',
-            selectedPointRef,
-            popupTypeRef,
-            (props) => formatForecastPopup(props as WaveFeatureProperties, waveData.metadata?.valid_time ?? null)
-          );
         } else {
           console.error('Failed to load wave data:', waveResult.reason);
+          setWaveError('Unable to load forecast data');
         }
 
         // Process buoy data
@@ -615,12 +631,68 @@ export default function WaveMap() {
           selectedPointRef.current = null;
           popupTypeRef.current = null;
         });
+
+        // Map-wide click handler — selects forecast spot or closes spot view
+        // Debounce to avoid triggering on double-click (which should zoom)
+        let clickTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        map.current.on('click', (e) => {
+          if (clickTimeout) clearTimeout(clickTimeout);
+
+          clickTimeout = setTimeout(() => {
+            clickTimeout = null;
+            if (!map.current) return;
+
+            // Don't interfere with buoy clicks
+            if (map.current.getLayer('buoy-circles')) {
+              const buoyFeatures = map.current.queryRenderedFeatures(e.point, { layers: ['buoy-circles'] });
+              if (buoyFeatures.length > 0) return;
+            }
+
+            // Close any open buoy popup
+            if (popup.current?.isOpen()) {
+              popup.current.remove();
+            }
+
+            // If a spot is already selected, close spot view and return
+            if (selectedSpotRef.current) {
+              setSelectedSpot(null);
+              return;
+            }
+
+            const data = currentDataRef.current;
+            if (!data || !data.features.length) return;
+
+            const { lng, lat } = e.lngLat;
+            const nearest = findNearestWaveFeature(data.features, lat, lng);
+            if (!nearest) return;
+
+            setSelectedSpot({
+              lat,
+              lng,
+              name: formatCoordinateLabel(lat, lng),
+            });
+
+            map.current.flyTo({
+              center: [lng, lat],
+              zoom: 6,
+              duration: 2000,
+              essential: true,
+            });
+          }, 250);
+        });
+
+        map.current.on('dblclick', () => {
+          if (clickTimeout) {
+            clearTimeout(clickTimeout);
+            clickTimeout = null;
+          }
+          // MapLibre handles the zoom automatically
+        });
       } catch (error) {
         console.error('Failed to load map data:', error);
       }
     });
-
-    map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     return () => {
       popup.current?.remove();
@@ -631,24 +703,101 @@ export default function WaveMap() {
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-      <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={mapContainer} data-testid="map-container" style={{ width: '100%', height: '100%' }} />
+
+      {/* Search Bar + Layer Toggle */}
+      <div style={{
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        zIndex: 10,
+      }}>
+        <SearchBar onLocationSelect={handleLocationSelect} />
+        <LayerToggle activeLayer={activeLayer} onChange={setActiveLayer} />
+      </div>
+
+      {/* Zoom Controls */}
+      <div style={{
+        position: 'absolute',
+        top: 80,
+        right: selectedSpot ? 420 : 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        zIndex: 10,
+        transition: 'right 0.3s ease',
+      }}>
+        {[
+          { label: '+', action: () => map.current?.zoomIn() },
+          { label: '\u2212', action: () => map.current?.zoomOut() },
+        ].map(({ label, action }) => (
+          <button
+            key={label}
+            onClick={action}
+            style={{
+              width: 36,
+              height: 36,
+              background: 'white',
+              border: '1px solid #ccc',
+              borderRadius: 4,
+              fontSize: 20,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Error Banner */}
+      {waveError && (
+        <div
+          data-testid="error-banner"
+          style={{
+            position: 'absolute',
+            top: 10,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
+            padding: '8px 16px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          }}
+        >
+          {waveError}
+        </div>
+      )}
 
       {/* Legend */}
-      <div style={LEGEND_STYLES.container}>
-        <div style={LEGEND_STYLES.title}>Wave Forecast</div>
-        <div style={LEGEND_STYLES.gradient} />
+      <div data-testid="legend" style={LEGEND_STYLES.container}>
+        <div style={LEGEND_STYLES.title}>{LAYER_CONFIGS[activeLayer].legendTitle}</div>
+        <div style={{ ...LEGEND_STYLES.gradient, background: LAYER_CONFIGS[activeLayer].legendGradient }} />
         <div style={LEGEND_STYLES.labels}>
-          <span>0m</span>
-          <span>3m</span>
-          <span>6m+</span>
+          <span>{LAYER_CONFIGS[activeLayer].legendLabels[0]}</span>
+          <span>{LAYER_CONFIGS[activeLayer].legendLabels[1]}</span>
+          <span>{LAYER_CONFIGS[activeLayer].legendLabels[2]}</span>
         </div>
 
         {/* Buoy Toggle */}
-        <label style={{
-          ...LEGEND_STYLES.toggleLabel,
-          cursor: buoyError ? 'default' : 'pointer',
-        }}>
+        <label
+          data-testid="buoy-toggle"
+          style={{
+            ...LEGEND_STYLES.toggleLabel,
+            cursor: buoyError ? 'default' : 'pointer',
+          }}
+        >
           <input
             type="checkbox"
             checked={showBuoys && !buoyError}
@@ -668,6 +817,7 @@ export default function WaveMap() {
             {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
           </span>
         </label>
+
       </div>
 
       {/* Time Slider */}
@@ -678,6 +828,22 @@ export default function WaveMap() {
         isLoading={isLoading}
         onChange={handleHourChange}
       />
+
+      {/* Vector Overlay */}
+      {selectedSpot && map.current && vectorData && (
+        <VectorOverlay
+          map={map.current}
+          location={{ lat: selectedSpot.lat, lng: selectedSpot.lng }}
+          swells={vectorData.swells}
+          windWaves={vectorData.windWaves}
+          wind={vectorData.wind}
+        />
+      )}
+
+      {/* Spot Panel */}
+      {selectedSpot && (
+        <SpotPanel location={selectedSpot} onClose={() => setSelectedSpot(null)} />
+      )}
     </div>
   );
 }

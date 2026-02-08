@@ -154,10 +154,13 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
     geojson = {
         "type": "FeatureCollection",
         "metadata": {
-            "forecastHour": forecast_hour,
-            "validTime": valid_time,
-            "referenceTime": reference_time,
-            "generatedAt": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            "source": "WaveWatch III",
+            "model_run": reference_time,
+            "forecast_hour": forecast_hour,
+            "valid_time": valid_time,
+            "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "grid_resolution": "6deg",
+            "point_count": len(features)
         },
         "features": features
     }

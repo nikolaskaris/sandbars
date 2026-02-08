@@ -10,6 +10,7 @@ import LayerToggle, { BuoyIcon } from './LayerToggle';
 import BuoyModal from './BuoyModal';
 import GeolocationControl from './GeolocationControl';
 import WaveLayer, { WaveHeightLegend } from './WaveLayer';
+import WaveParticleLayer from './WaveParticleLayer';
 import WindLayer from './WindLayer';
 import { ForecastTimeline } from '@/components/Timeline/ForecastTimeline';
 import { useLatestForecast } from '@/hooks/useLatestForecast';
@@ -65,6 +66,15 @@ function WindIcon() {
   );
 }
 
+// Swell direction icon (animated lines)
+function SwellIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 export default function MapView({
   favorites = [],
   onMapClick,
@@ -86,7 +96,8 @@ export default function MapView({
   // Layer states
   const [showBuoys, setShowBuoys] = useState(initialShowBuoyLayer);
   const [showWaves, setShowWaves] = useState(initialShowWaveLayer);
-  const [showWind, setShowWind] = useState(true); // Wind enabled by default
+  const [showWaveDirection, setShowWaveDirection] = useState(true); // Wave direction particles
+  const [showWind, setShowWind] = useState(false); // Wind disabled by default (wave direction is more relevant)
   const [buoyStations, setBuoyStations] = useState<NDBCStation[]>([]);
   const [isLoadingBuoys, setIsLoadingBuoys] = useState(false);
   const [waveData, setWaveData] = useState<WaveDataPoint[]>([]);
@@ -129,12 +140,13 @@ export default function MapView({
     }
   }, []);
 
-  // Fetch wave data when layer is enabled or forecast hour changes
+  // Fetch wave data when any wave layer is enabled or forecast hour changes
   useEffect(() => {
-    if (showWaves) {
+    if (showWaves || showWaveDirection) {
+      console.log(`MapView: Fetching wave data for forecastHour=${forecastHour}`);
       fetchWaveData(forecastHour);
     }
-  }, [showWaves, forecastHour]); // Removed fetchWaveData to avoid stale closure issues
+  }, [showWaves, showWaveDirection, forecastHour, fetchWaveData]); // Fetch when either layer needs data
 
   // Fetch buoy stations when layer is enabled
   useEffect(() => {
@@ -159,16 +171,22 @@ export default function MapView({
   // Layer configuration
   const layerConfig = [
     {
-      id: 'wind',
-      label: 'Wind',
-      icon: <WindIcon />,
-      enabled: showWind,
-    },
-    {
       id: 'waves',
       label: 'Wave Height',
       icon: <WaveIcon />,
       enabled: showWaves,
+    },
+    {
+      id: 'swell',
+      label: 'Swell Direction',
+      icon: <SwellIcon />,
+      enabled: showWaveDirection,
+    },
+    {
+      id: 'wind',
+      label: 'Wind',
+      icon: <WindIcon />,
+      enabled: showWind,
     },
     {
       id: 'buoys',
@@ -183,6 +201,8 @@ export default function MapView({
       setShowBuoys(enabled);
     } else if (layerId === 'waves') {
       setShowWaves(enabled);
+    } else if (layerId === 'swell') {
+      setShowWaveDirection(enabled);
     } else if (layerId === 'wind') {
       setShowWind(enabled);
     }
@@ -301,8 +321,27 @@ export default function MapView({
         {/* Wind Layer - animated particles */}
         <WindLayer visible={showWind} />
 
-        {/* Wave Layer */}
-        <WaveLayer visible={showWaves} data={waveData} opacity={0.5} />
+        {/* Wave Height Colormap Layer */}
+        <WaveLayer visible={showWaves} data={waveData} opacity={0.6} />
+
+        {/* Wave Direction Animation Layer - nullschool-style oscillating bars */}
+        <WaveParticleLayer
+          visible={showWaveDirection}
+          data={waveData}
+          config={{
+            barCount: 6000,            // Number of oscillating bars
+            barLength: 12,             // Short bars (10-15px)
+            barWidth: 1.5,             // Stroke width
+            oscillationAmplitude: 8,   // Max lateral displacement
+            oscillationSpeed: 0.08,    // Oscillation frequency
+            barLifespan: 60,           // ~1 second at 60fps
+            fadeInFrames: 8,
+            fadeOutFrames: 15,
+            respawnRadius: 5,          // Spawn nearby, not across map
+            color: [220, 240, 255],    // Light cyan-white
+            opacity: 0.7,
+          }}
+        />
 
         {/* Buoy Layer */}
         <BuoyLayer

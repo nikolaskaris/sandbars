@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-
-// Forecast hours available (every 24 hours for 16 days)
-const FORECAST_HOURS = [0, 24, 48, 72, 96, 120, 144, 168, 192, 216, 240, 264, 288, 312, 336, 360, 384];
+import { FORECAST_HOURS } from '@/lib/wave-utils';
 
 interface TimeSliderProps {
   currentHour: number;
@@ -96,6 +94,7 @@ export default function TimeSlider({
 
   return (
     <div
+      data-testid="time-slider"
       style={{
         position: 'absolute',
         bottom: 0,
@@ -120,6 +119,7 @@ export default function TimeSlider({
         }}
       >
         <span
+          data-testid="forecast-time-label"
           style={{
             fontSize: 15,
             fontWeight: 600,
