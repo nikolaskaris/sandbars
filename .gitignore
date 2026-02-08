@@ -1,4 +1,12 @@
 node_modules
 
+# Environment variables
+.env.local
+.env*.local
+
 # GRIB data files (large, downloaded on demand)
 data/grib/
+
+# Playwright
+playwright-report/
+test-results/
