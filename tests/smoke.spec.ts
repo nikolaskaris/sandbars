@@ -10,11 +10,11 @@ test.describe('Smoke Tests - UI Elements', () => {
     await expect(page.locator('[data-testid="buoy-toggle"]')).toBeVisible();
   });
 
-  test('legend contains wave forecast title', async ({ page }) => {
+  test('legend contains wave height label', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const legend = page.locator('[data-testid="legend"]');
-    await expect(legend).toContainText('Wave Forecast');
+    await expect(legend).toContainText('Wave Height');
   });
 
   test('buoy toggle shows NDBC label', async ({ page }) => {
