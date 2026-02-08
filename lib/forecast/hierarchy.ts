@@ -1,6 +1,10 @@
 /**
  * Multi-Source Data Hierarchy Module
  * Implements priority cascade: Primary → Secondary → Tertiary → Model Fallback
+ *
+ * Performance optimizations:
+ * - Parallel buoy data fetches (Issue #16)
+ * - Request-scoped buoy data cache (Issue #18)
  */
 
 import { QualityFlag, MetricType } from '@/types';
@@ -9,6 +13,7 @@ import {
   findNearestBuoys,
   findNearestBuoyWithData,
   NDBCBuoyReading,
+  NDBCBuoyInfo,
   calculateDistance,
 } from './sources/ndbc';
 import { getSeaSurfaceTemperature } from './sources/sst';
@@ -39,6 +44,79 @@ export interface MetricValue {
   sourceHierarchy: string[];
 }
 
+// =============================================================================
+// Request-Scoped Caching (Issue #18)
+// =============================================================================
+
+/**
+ * Request-scoped cache for buoy data.
+ * Avoids repeated fetches for the same buoy within a single forecast request.
+ */
+export class BuoyDataCache {
+  private cache = new Map<string, NDBCBuoyReading | null>();
+  private pending = new Map<string, Promise<NDBCBuoyReading | null>>();
+
+  async get(buoyId: string): Promise<NDBCBuoyReading | null> {
+    // Return cached value if available
+    if (this.cache.has(buoyId)) {
+      return this.cache.get(buoyId)!;
+    }
+
+    // If fetch is already in progress, wait for it
+    if (this.pending.has(buoyId)) {
+      return this.pending.get(buoyId)!;
+    }
+
+    // Start new fetch
+    const fetchPromise = fetchNDBCBuoyData(buoyId).then(data => {
+      this.cache.set(buoyId, data);
+      this.pending.delete(buoyId);
+      return data;
+    });
+
+    this.pending.set(buoyId, fetchPromise);
+    return fetchPromise;
+  }
+
+  /**
+   * Batch fetch multiple buoys in parallel (Issue #16)
+   */
+  async getMany(buoyIds: string[]): Promise<Map<string, NDBCBuoyReading | null>> {
+    const results = await Promise.all(
+      buoyIds.map(async id => ({
+        id,
+        data: await this.get(id),
+      }))
+    );
+    return new Map(results.map(r => [r.id, r.data]));
+  }
+
+  clear(): void {
+    this.cache.clear();
+    this.pending.clear();
+  }
+}
+
+/**
+ * Helper to fetch buoy readings in parallel with caching
+ */
+async function fetchBuoyDataParallel(
+  buoys: NDBCBuoyInfo[],
+  cache?: BuoyDataCache
+): Promise<Map<string, NDBCBuoyReading | null>> {
+  if (cache) {
+    return cache.getMany(buoys.map(b => b.id));
+  }
+  // No cache - still parallelize
+  const results = await Promise.all(
+    buoys.map(async buoy => ({
+      id: buoy.id,
+      data: await fetchNDBCBuoyData(buoy.id),
+    }))
+  );
+  return new Map(results.map(r => [r.id, r.data]));
+}
+
 /**
  * Get wave height with fallback hierarchy
  * Primary: Nearest NDBC buoy (< 50km)
@@ -49,17 +127,26 @@ export interface MetricValue {
 export async function getWaveHeight(
   lat: number,
   lon: number,
-  targetTime?: Date
+  targetTime?: Date,
+  cache?: BuoyDataCache
 ): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
-  // Primary: Try nearest buoy
-  const nearestBuoys = findNearestBuoys(lat, lon, 50, 1);
+  // Get all buoys we might need (up to 100km for interpolation)
+  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+  const nearestBuoys = nearbyBuoys.filter(b =>
+    calculateDistance(lat, lon, b.lat, b.lon) <= 50
+  );
+
+  // Parallel fetch all buoy data (Issue #16)
+  const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
+  // Primary: Try nearest buoy (< 50km)
   if (nearestBuoys.length > 0) {
     const buoy = nearestBuoys[0];
     sourceHierarchy.push(`buoy_${buoy.id}_primary`);
 
-    const buoyData = await fetchNDBCBuoyData(buoy.id);
+    const buoyData = buoyDataMap.get(buoy.id);
     if (buoyData && buoyData.waveHeight !== undefined) {
       return {
         value: buoyData.waveHeight,
@@ -71,13 +158,12 @@ export async function getWaveHeight(
   }
 
   // Secondary: Try interpolation from multiple buoys
-  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
   if (nearbyBuoys.length >= 2) {
     sourceHierarchy.push('buoy_interpolation');
 
     const dataPoints: DataPoint[] = [];
     for (const buoy of nearbyBuoys) {
-      const buoyData = await fetchNDBCBuoyData(buoy.id);
+      const buoyData = buoyDataMap.get(buoy.id);
       if (buoyData && buoyData.waveHeight !== undefined) {
         dataPoints.push({
           value: buoyData.waveHeight,
@@ -120,17 +206,26 @@ export async function getWaveHeight(
 export async function getWavePeriod(
   lat: number,
   lon: number,
-  targetTime?: Date
+  targetTime?: Date,
+  cache?: BuoyDataCache
 ): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
+  // Get all buoys we might need
+  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+  const nearestBuoys = nearbyBuoys.filter(b =>
+    calculateDistance(lat, lon, b.lat, b.lon) <= 50
+  );
+
+  // Parallel fetch (Issue #16)
+  const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
   // Primary: Try nearest buoy
-  const nearestBuoys = findNearestBuoys(lat, lon, 50, 1);
   if (nearestBuoys.length > 0) {
     const buoy = nearestBuoys[0];
     sourceHierarchy.push(`buoy_${buoy.id}_primary`);
 
-    const buoyData = await fetchNDBCBuoyData(buoy.id);
+    const buoyData = buoyDataMap.get(buoy.id);
     if (buoyData && buoyData.dominantWavePeriod !== undefined) {
       return {
         value: buoyData.dominantWavePeriod,
@@ -142,13 +237,12 @@ export async function getWavePeriod(
   }
 
   // Secondary: Interpolation
-  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
   if (nearbyBuoys.length >= 2) {
     sourceHierarchy.push('buoy_interpolation');
 
     const dataPoints: DataPoint[] = [];
     for (const buoy of nearbyBuoys) {
-      const buoyData = await fetchNDBCBuoyData(buoy.id);
+      const buoyData = buoyDataMap.get(buoy.id);
       const period = buoyData?.dominantWavePeriod || buoyData?.averageWavePeriod;
       if (period !== undefined) {
         dataPoints.push({
@@ -188,17 +282,26 @@ export async function getWavePeriod(
 export async function getWaveDirection(
   lat: number,
   lon: number,
-  windDirection?: number
+  windDirection?: number,
+  cache?: BuoyDataCache
 ): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
+  // Get all buoys we might need
+  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+  const nearestBuoys = nearbyBuoys.filter(b =>
+    calculateDistance(lat, lon, b.lat, b.lon) <= 50
+  );
+
+  // Parallel fetch (Issue #16)
+  const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
   // Primary: Try nearest buoy within 50km
-  const nearestBuoys = findNearestBuoys(lat, lon, 50, 1);
   if (nearestBuoys.length > 0) {
     const buoy = nearestBuoys[0];
     sourceHierarchy.push(`buoy_${buoy.id}_primary`);
 
-    const buoyData = await fetchNDBCBuoyData(buoy.id);
+    const buoyData = buoyDataMap.get(buoy.id);
     if (buoyData && buoyData.waveDirection !== undefined) {
       return {
         value: buoyData.waveDirection,
@@ -210,13 +313,12 @@ export async function getWaveDirection(
   }
 
   // Secondary: Try interpolation from multiple buoys within 100km
-  const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
   if (nearbyBuoys.length >= 2) {
     sourceHierarchy.push('buoy_interpolation');
 
     const dataPoints: DataPoint[] = [];
     for (const buoy of nearbyBuoys) {
-      const buoyData = await fetchNDBCBuoyData(buoy.id);
+      const buoyData = buoyDataMap.get(buoy.id);
       if (buoyData && buoyData.waveDirection !== undefined) {
         dataPoints.push({
           value: buoyData.waveDirection,
@@ -280,7 +382,8 @@ export async function getWaveDirection(
 export async function getAirTemperature(
   lat: number,
   lon: number,
-  targetTime: Date
+  targetTime: Date,
+  cache?: BuoyDataCache
 ): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
@@ -305,9 +408,12 @@ export async function getAirTemperature(
   if (nearbyBuoys.length > 0) {
     sourceHierarchy.push('buoy_air_temp');
 
+    // Parallel fetch (Issue #16)
+    const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
     const dataPoints: DataPoint[] = [];
     for (const buoy of nearbyBuoys) {
-      const buoyData = await fetchNDBCBuoyData(buoy.id);
+      const buoyData = buoyDataMap.get(buoy.id);
       if (buoyData && buoyData.airTemperature !== undefined) {
         dataPoints.push({
           value: buoyData.airTemperature,
@@ -345,7 +451,8 @@ export async function getAirTemperature(
 export async function getWindData(
   lat: number,
   lon: number,
-  targetTime: Date
+  targetTime: Date,
+  cache?: BuoyDataCache
 ): Promise<{ speed: MetricValue; direction: MetricValue }> {
   const sourceHierarchy: string[] = [];
 
@@ -375,11 +482,15 @@ export async function getWindData(
 
   // Secondary: Buoy interpolation
   const nearbyBuoys = findNearestBuoys(lat, lon, 100, 5);
+
+  // Parallel fetch (Issue #16)
+  const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
   const speedDataPoints: DataPoint[] = [];
   const dirDataPoints: DataPoint[] = [];
 
   for (const buoy of nearbyBuoys) {
-    const buoyData = await fetchNDBCBuoyData(buoy.id);
+    const buoyData = buoyDataMap.get(buoy.id);
     const distance = calculateDistance(lat, lon, buoy.lat, buoy.lon);
 
     if (buoyData && buoyData.windSpeed !== undefined) {
@@ -460,16 +571,23 @@ export async function getWindData(
 /**
  * Get water temperature from buoys with SST satellite fallback
  */
-export async function getWaterTemperature(lat: number, lon: number): Promise<MetricValue> {
+export async function getWaterTemperature(
+  lat: number,
+  lon: number,
+  cache?: BuoyDataCache
+): Promise<MetricValue> {
   const sourceHierarchy: string[] = [];
 
   // Primary: Try nearby buoys (< 50km for real-time accuracy)
   const nearbyBuoys = findNearestBuoys(lat, lon, 50, 5);
-  const dataPoints: DataPoint[] = [];
 
+  // Parallel fetch (Issue #16)
+  const buoyDataMap = await fetchBuoyDataParallel(nearbyBuoys, cache);
+
+  const dataPoints: DataPoint[] = [];
   for (const buoy of nearbyBuoys) {
     sourceHierarchy.push(`buoy_${buoy.id}`);
-    const buoyData = await fetchNDBCBuoyData(buoy.id);
+    const buoyData = buoyDataMap.get(buoy.id);
     if (buoyData && buoyData.waterTemperature !== undefined) {
       dataPoints.push({
         value: buoyData.waterTemperature,
