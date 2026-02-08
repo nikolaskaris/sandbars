@@ -1,0 +1,56 @@
+name: Update Forecast Data
+
+on:
+  schedule:
+    # Run at 2:30, 8:30, 14:30, 20:30 UTC (2h after WaveWatch III model runs)
+    - cron: '30 2,8,14,20 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install xarray cfgrib eccodes numpy requests
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Download GRIB files
+        run: |
+          chmod +x ./scripts/download-grib-files.sh
+          ./scripts/download-grib-files.sh
+
+      - name: Convert GRIB to GeoJSON
+        run: python scripts/convert-grib-to-geojson.py
+
+      - name: Fetch buoy observations
+        run: python scripts/fetch-buoys.py
+
+      - name: Upload to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/upload-to-supabase.js
+
+      - name: Summary
+        run: |
+          echo "## Forecast Data Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Wave forecast files: $(ls -1 public/data/wave-data-f*.geojson 2>/dev/null | wc -l | tr -d ' ')" >> $GITHUB_STEP_SUMMARY
+          echo "- Buoy observations: $(ls -1 public/data/buoy-observations.geojson 2>/dev/null && echo 'Yes' || echo 'No')" >> $GITHUB_STEP_SUMMARY
+          echo "- Timestamp: $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
