@@ -182,6 +182,11 @@ echo ""
 echo "Files in ${OUTPUT_DIR}/:"
 ls -lh "$OUTPUT_DIR"/*.grib2 2>/dev/null || echo "(no files)"
 
-if [[ $FAILED -gt 0 ]]; then
+if [ "$DOWNLOADED" -lt 4 ]; then
+    echo "ERROR: Too few files downloaded ($DOWNLOADED). Failing."
     exit 1
 fi
+if [ "$FAILED" -gt 0 ]; then
+    echo "WARNING: $FAILED files failed but $DOWNLOADED succeeded. Continuing."
+fi
+exit 0
