@@ -30,7 +30,7 @@ test.describe('Smoke Tests - UI Elements', () => {
     const slider = page.locator('[data-testid="time-slider"] input[type="range"]');
     await expect(slider).toBeVisible();
     await expect(slider).toHaveAttribute('min', '0');
-    await expect(slider).toHaveAttribute('max', '16');
+    await expect(slider).toHaveAttribute('max', '104');
   });
 
   test('forecast time label is visible', async ({ page }) => {
