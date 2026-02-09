@@ -415,15 +415,36 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   const selectedSpotRef = useRef(selectedSpot);
   useEffect(() => { selectedSpotRef.current = selectedSpot; }, [selectedSpot]);
 
+  // Track previous map view to restore on spot close
+  const [previousView, setPreviousView] = useState<{ center: [number, number]; zoom: number } | null>(null);
+  const previousViewRef = useRef(previousView);
+  useEffect(() => { previousViewRef.current = previousView; }, [previousView]);
+
   // Handle initialSpot from navigation
   useEffect(() => {
     if (initialSpot) {
+      if (map.current && !previousViewRef.current) {
+        const c = map.current.getCenter();
+        setPreviousView({ center: [c.lng, c.lat], zoom: map.current.getZoom() });
+      }
       setSelectedSpot(initialSpot);
       if (map.current) {
         map.current.flyTo({ center: [initialSpot.lng, initialSpot.lat], zoom: 6, duration: 2000 });
       }
     }
   }, [initialSpot]);
+
+  // Restore previous map view when spot is deselected
+  useEffect(() => {
+    if (!selectedSpot && previousView && map.current) {
+      map.current.flyTo({
+        center: previousView.center,
+        zoom: previousView.zoom,
+        duration: 1500,
+      });
+      setPreviousView(null);
+    }
+  }, [selectedSpot, previousView]);
 
   // Keep refs in sync with state so map click handler has latest data
   useEffect(() => { currentDataRef.current = currentData; }, [currentData]);
@@ -490,6 +511,11 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   // Handle location search result
   const handleLocationSelect = useCallback((lat: number, lon: number, name: string) => {
     if (!map.current) return;
+
+    if (!previousViewRef.current) {
+      const c = map.current.getCenter();
+      setPreviousView({ center: [c.lng, c.lat], zoom: map.current.getZoom() });
+    }
 
     map.current.flyTo({
       center: [lon, lat],
@@ -666,6 +692,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             const { lng, lat } = e.lngLat;
             const nearest = findNearestWaveFeature(data.features, lat, lng);
             if (!nearest) return;
+
+            // Save current view before zooming in (only if not already saved)
+            if (!previousViewRef.current) {
+              const c = map.current.getCenter();
+              setPreviousView({ center: [c.lng, c.lat], zoom: map.current.getZoom() });
+            }
 
             setSelectedSpot({
               lat,
