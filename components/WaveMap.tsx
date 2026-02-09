@@ -835,11 +835,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       <div style={{
         position: 'absolute',
         top: 16,
-        right: 16,
+        right: selectedSpot && !isMobile ? 416 : 16,
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
         zIndex: 10,
+        transition: 'right 0.3s ease',
       }}>
         {[
           { label: '+', action: () => map.current?.zoomIn() },
