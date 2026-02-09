@@ -28,17 +28,7 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Close dropdown when clicking outside (handled by backdrop below)
 
   const performSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
@@ -238,24 +228,40 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
         </button>
       </div>
 
-      {/* Results Dropdown */}
+      {/* Results Dropdown with backdrop */}
       {showDropdown && (results.length > 0 || isLoading || (error && isExplicitSearch)) && (
-        <div
-          data-testid="search-results"
-          role="listbox"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 4,
-            background: 'white',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            overflow: 'hidden',
-            zIndex: 100,
-          }}
-        >
+        <>
+          {/* Invisible backdrop to capture outside clicks */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 5,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDropdown(false);
+            }}
+          />
+          <div
+            data-testid="search-results"
+            role="listbox"
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: 4,
+              background: 'white',
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              overflow: 'hidden',
+              zIndex: 10,
+            }}
+          >
           {results.map((result, index) => (
             <button
               key={result.place_id}
@@ -317,7 +323,8 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
               {error}
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
