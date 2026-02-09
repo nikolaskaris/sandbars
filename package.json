@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "predev": "rm -rf .next",
-    "dev": "next dev --turbopack",
-    "dev:clean": "rm -rf .next node_modules/.cache && next dev --turbopack",
+    "dev": "next dev",
+    "dev:turbo": "next dev --turbopack",
+    "dev:clean": "rm -rf .next node_modules/.cache && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
