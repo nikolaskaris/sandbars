@@ -99,6 +99,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('half');
   const [saved, setSaved] = useState(() => isFavorite(location.lat, location.lng));
   const [toast, setToast] = useState<string | null>(null);
 
@@ -125,12 +126,38 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
 
   // Check for mobile viewport
   useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 640px)').matches);
+    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
     check();
-    const mql = window.matchMedia('(max-width: 640px)');
+    const mql = window.matchMedia('(max-width: 768px)');
     mql.addEventListener('change', check);
     return () => mql.removeEventListener('change', check);
   }, []);
+
+  // Prevent body scroll when sheet is fully expanded on mobile
+  useEffect(() => {
+    if (isMobile && sheetHeight === 'full') {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isMobile, sheetHeight]);
+
+  const getSheetHeightPercent = () => {
+    switch (sheetHeight) {
+      case 'collapsed': return 15;
+      case 'half': return 45;
+      case 'full': return 90;
+    }
+  };
+
+  const handleDragHandleTap = () => {
+    setSheetHeight(prev => {
+      if (prev === 'collapsed') return 'half';
+      if (prev === 'half') return 'full';
+      return 'collapsed';
+    });
+  };
 
   // Fetch all forecast hours
   useEffect(() => {
@@ -197,12 +224,28 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
   return (
     <div
       data-testid="spot-panel"
-      style={{
+      style={isMobile ? {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: `${getSheetHeightPercent()}vh`,
+        background: 'white',
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
+        transition: 'height 0.3s ease',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        fontFamily: 'system-ui, sans-serif',
+      } : {
         position: 'absolute',
         top: 0,
         right: 0,
         height: '100%',
-        width: isMobile ? '100%' : 400,
+        width: 400,
         background: 'white',
         boxShadow: '-2px 0 12px rgba(0,0,0,0.15)',
         zIndex: 20,
@@ -211,18 +254,40 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
         fontFamily: 'system-ui, sans-serif',
       }}
     >
-      {/* Sticky Header */}
+      {/* Mobile drag handle */}
+      {isMobile && (
+        <div
+          onClick={handleDragHandleTap}
+          style={{
+            padding: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{
+            width: 40,
+            height: 4,
+            backgroundColor: '#ccc',
+            borderRadius: 2,
+          }} />
+        </div>
+      )}
+
+      {/* Header */}
       <div
         style={{
-          position: 'sticky',
-          top: 0,
+          position: isMobile ? 'relative' : 'sticky',
+          top: isMobile ? undefined : 0,
           background: 'white',
           borderBottom: '1px solid #e5e7eb',
-          padding: '16px 20px',
+          padding: isMobile ? '0 16px 12px' : '16px 20px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           zIndex: 1,
+          flexShrink: 0,
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
