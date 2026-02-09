@@ -345,61 +345,68 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
             </div>
 
             {/* Entries for this day */}
-            {day.entries.map((entry) => {
-              const primarySwell = entry.swells[0];
-              const parsedTime = parseValidTime(entry.validTime);
-              const timeStr = parsedTime
-                ? parsedTime.toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })
-                : `+${entry.forecastHour}h`;
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {day.entries.map((entry) => {
+                const primarySwell = entry.swells[0];
+                const parsedTime = parseValidTime(entry.validTime);
+                const timeStr = parsedTime
+                  ? parsedTime.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                    })
+                  : `+${entry.forecastHour}h`;
 
-              return (
-                <div
-                  key={entry.forecastHour}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom: '1px solid #f3f4f6',
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <div style={{ fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                    {timeStr}
-                  </div>
-
-                  {/* Wave height */}
-                  <div style={{ color: '#1a1a1a' }}>
-                    <span style={{ fontWeight: 600 }}>{entry.waveHeight}m</span>
-                    {primarySwell && (
-                      <span style={{ color: '#666' }}>
-                        {' '}@ {primarySwell.period}s from {degreesToCompass(primarySwell.direction)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Wind */}
-                  {entry.wind && entry.wind.speed != null && (
-                    <div style={{ color: '#666', marginTop: 2 }}>
-                      Wind: {entry.wind.speed} m/s from {degreesToCompass(entry.wind.direction)}
+                return (
+                  <div
+                    key={entry.forecastHour}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: 8,
+                      background: 'rgba(0, 0, 0, 0.02)',
+                      borderRadius: 4,
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, minWidth: 70, color: '#333' }}>
+                      {timeStr}
                     </div>
-                  )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {/* Wave height */}
+                      <div style={{ color: '#1a1a1a' }}>
+                        <span style={{ fontWeight: 600 }}>{entry.waveHeight}m</span>
+                        {primarySwell && (
+                          <span style={{ color: '#666' }}>
+                            {' '}@ {primarySwell.period}s from {degreesToCompass(primarySwell.direction)}
+                          </span>
+                        )}
+                      </div>
 
-                  {/* Additional swells */}
-                  {entry.swells.length > 1 && (
-                    <div style={{ color: '#888', marginTop: 2, fontSize: 12 }}>
-                      {entry.swells.slice(1).map((s, i) => (
-                        <div key={i}>
-                          + {s.height}m @ {s.period}s from {degreesToCompass(s.direction)}
+                      {/* Wind */}
+                      {entry.wind && entry.wind.speed != null && (
+                        <div style={{ color: '#666', fontSize: 12 }}>
+                          Wind: {entry.wind.speed} m/s from {degreesToCompass(entry.wind.direction)}
                         </div>
-                      ))}
+                      )}
+
+                      {/* Additional swells */}
+                      {entry.swells.length > 1 && (
+                        <div style={{ color: '#888', fontSize: 11 }}>
+                          {entry.swells.slice(1).map((s, i) => (
+                            <div key={i}>
+                              + {s.height}m @ {s.period}s from {degreesToCompass(s.direction)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
