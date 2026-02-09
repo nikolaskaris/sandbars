@@ -494,11 +494,17 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         const source = map.current.getSource('waves') as maplibregl.GeoJSONSource;
         if (source) {
           source.setData(data);
+        } else {
+          setupWaveLayer(map.current, data);
         }
       }
     } catch (error) {
       console.error(`Failed to load forecast data for hour ${hour}:`, error);
-      setWaveError('Unable to load forecast data');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setWaveError('No internet connection. Please check your network and try again.');
+      } else {
+        setWaveError('Unable to load forecast data. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -508,6 +514,22 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     setCurrentHour(hour);
     loadForecastData(hour);
   }, [loadForecastData]);
+
+  const handleRetry = useCallback(() => {
+    setWaveError(null);
+    loadForecastData(currentHour);
+  }, [loadForecastData, currentHour]);
+
+  // Auto-retry when coming back online
+  useEffect(() => {
+    const handleOnline = () => {
+      if (waveError) {
+        loadForecastData(currentHour);
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [waveError, currentHour, loadForecastData]);
 
   // Handle location search result
   const handleLocationSelect = useCallback((lat: number, lon: number, name: string) => {
@@ -637,7 +659,11 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           setupWaveLayer(map.current, waveData);
         } else {
           console.error('Failed to load wave data:', waveResult.reason);
-          setWaveError('Unable to load forecast data');
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setWaveError('No internet connection. Please check your network and try again.');
+          } else {
+            setWaveError('Unable to load forecast data. Please try again.');
+          }
         }
 
         // Process buoy data
@@ -805,8 +831,54 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         ))}
       </div>
 
-      {/* Error Banner */}
-      {waveError && (
+      {/* Full error overlay — initial load failed, no data at all */}
+      {!currentData && waveError && (
+        <div
+          data-testid="error-overlay"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            zIndex: 1000,
+            padding: 20,
+            textAlign: 'center',
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 16 }}>&#x1F30A;</div>
+          <h2 style={{ margin: '0 0 8px 0', color: '#333', fontSize: 20, fontWeight: 600 }}>
+            Couldn&apos;t Load Forecast
+          </h2>
+          <p style={{ margin: '0 0 24px 0', color: '#666', maxWidth: 300, fontSize: 14 }}>
+            {waveError}
+          </p>
+          <button
+            onClick={handleRetry}
+            style={{
+              padding: '12px 24px',
+              fontSize: 16,
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {/* Error banner — data loaded but update failed */}
+      {currentData && waveError && (
         <div
           data-testid="error-banner"
           style={{
@@ -822,9 +894,28 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             fontSize: 13,
             fontFamily: 'system-ui, sans-serif',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
           }}
         >
           {waveError}
+          <button
+            onClick={handleRetry}
+            style={{
+              background: '#991b1b',
+              color: 'white',
+              border: 'none',
+              borderRadius: 4,
+              padding: '4px 12px',
+              fontSize: 12,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontFamily: 'system-ui, sans-serif',
+            }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
