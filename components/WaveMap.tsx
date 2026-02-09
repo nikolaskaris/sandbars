@@ -411,6 +411,21 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   const [buoyError, setBuoyError] = useState<string | null>(null);
   const [buoyLastUpdated, setBuoyLastUpdated] = useState<Date | null>(null);
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  const isMobileRef = useRef(false);
+  useEffect(() => {
+    const check = () => {
+      const mobile = window.matchMedia('(max-width: 768px)').matches;
+      setIsMobile(mobile);
+      isMobileRef.current = mobile;
+    };
+    check();
+    const mql = window.matchMedia('(max-width: 768px)');
+    mql.addEventListener('change', check);
+    return () => mql.removeEventListener('change', check);
+  }, []);
+
   // Spot panel state
   const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const selectedSpotRef = useRef(selectedSpot);
@@ -421,6 +436,14 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   const previousViewRef = useRef(previousView);
   useEffect(() => { previousViewRef.current = previousView; }, [previousView]);
 
+  // Compute bottom padding so the selected spot centers above the mobile bottom sheet
+  const getMobilePadding = () => ({
+    top: 0,
+    bottom: isMobileRef.current ? window.innerHeight * 0.45 : 0,
+    left: 0,
+    right: 0,
+  });
+
   // Handle initialSpot from navigation
   useEffect(() => {
     if (initialSpot) {
@@ -430,7 +453,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       }
       setSelectedSpot(initialSpot);
       if (map.current) {
-        map.current.flyTo({ center: [initialSpot.lng, initialSpot.lat], zoom: 6, duration: 2000 });
+        map.current.flyTo({ center: [initialSpot.lng, initialSpot.lat], zoom: 6, duration: 2000, padding: getMobilePadding() });
       }
     }
   }, [initialSpot]);
@@ -442,6 +465,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         center: previousView.center,
         zoom: previousView.zoom,
         duration: 1500,
+        padding: { top: 0, bottom: 0, left: 0, right: 0 },
       });
       setPreviousView(null);
     }
@@ -544,6 +568,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       center: [lon, lat],
       zoom: 6,
       duration: 2000,
+      padding: getMobilePadding(),
     });
 
     setSelectedSpot({ lat, lng: lon, name });
@@ -744,6 +769,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
               zoom: 6,
               duration: 2000,
               essential: true,
+              padding: {
+                top: 0,
+                bottom: isMobileRef.current ? window.innerHeight * 0.45 : 0,
+                left: 0,
+                right: 0,
+              },
             });
           }, 250);
         });
@@ -761,6 +792,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             center: [selectedSpotRef.current.lng, selectedSpotRef.current.lat],
             zoom: 6,
             duration: 2000,
+            padding: {
+              top: 0,
+              bottom: isMobileRef.current ? window.innerHeight * 0.45 : 0,
+              left: 0,
+              right: 0,
+            },
           });
         }
       } catch (error) {
@@ -797,8 +834,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {/* Zoom Controls */}
       <div style={{
         position: 'absolute',
-        top: 80,
-        right: selectedSpot ? 420 : 20,
+        top: isMobile ? 130 : 80,
+        right: !isMobile && selectedSpot ? 420 : 20,
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
