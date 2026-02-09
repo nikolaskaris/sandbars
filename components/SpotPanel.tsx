@@ -18,6 +18,7 @@ import { isFavorite, addFavorite, removeFavorite, findFavorite } from '@/lib/fav
 interface SpotPanelProps {
   location: { lat: number; lng: number; name: string };
   onClose: () => void;
+  onFavoritesChange?: () => void;
 }
 
 interface ForecastEntry {
@@ -92,7 +93,7 @@ function groupByDay(entries: ForecastEntry[]): DayGroup[] {
   return result;
 }
 
-export default function SpotPanel({ location, onClose }: SpotPanelProps) {
+export default function SpotPanel({ location, onClose, onFavoritesChange }: SpotPanelProps) {
   const [forecasts, setForecasts] = useState<ForecastEntry[]>([]);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -118,6 +119,7 @@ export default function SpotPanel({ location, onClose }: SpotPanelProps) {
       setSaved(true);
       setToast('Saved!');
     }
+    onFavoritesChange?.();
     setTimeout(() => setToast(null), 2000);
   };
 

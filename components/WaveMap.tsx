@@ -721,6 +721,14 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           }
           // MapLibre handles the zoom automatically
         });
+        // Fly to pending spot if set before map loaded (e.g. from Favorites "View on Map")
+        if (selectedSpotRef.current && map.current) {
+          map.current.flyTo({
+            center: [selectedSpotRef.current.lng, selectedSpotRef.current.lat],
+            zoom: 6,
+            duration: 2000,
+          });
+        }
       } catch (error) {
         console.error('Failed to load map data:', error);
       }
@@ -874,7 +882,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
 
       {/* Spot Panel */}
       {selectedSpot && (
-        <SpotPanel location={selectedSpot} onClose={() => setSelectedSpot(null)} />
+        <SpotPanel location={selectedSpot} onClose={() => setSelectedSpot(null)} onFavoritesChange={onFavoritesChange} />
       )}
     </div>
   );
