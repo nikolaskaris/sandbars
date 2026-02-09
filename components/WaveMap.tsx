@@ -834,13 +834,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {/* Zoom Controls */}
       <div style={{
         position: 'absolute',
-        top: isMobile ? 130 : 80,
-        right: !isMobile && selectedSpot ? 420 : 20,
+        top: 16,
+        right: 16,
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
         zIndex: 10,
-        transition: 'right 0.3s ease',
       }}>
         {[
           { label: '+', action: () => map.current?.zoomIn() },
