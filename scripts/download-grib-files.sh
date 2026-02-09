@@ -11,7 +11,8 @@
 set -e
 
 # Configuration
-FORECAST_HOURS="000 024 048 072 096 120 144 168 192 216 240 264 288 312 336 360 384"
+# 3-hourly for days 0-10 (f000-f240), 6-hourly for days 10-16 (f246-f384)
+FORECAST_HOURS="000 003 006 009 012 015 018 021 024 027 030 033 036 039 042 045 048 051 054 057 060 063 066 069 072 075 078 081 084 087 090 093 096 099 102 105 108 111 114 117 120 123 126 129 132 135 138 141 144 147 150 153 156 159 162 165 168 171 174 177 180 183 186 189 192 195 198 201 204 207 210 213 216 219 222 225 228 231 234 237 240 246 252 258 264 270 276 282 288 294 300 306 312 318 324 330 336 342 348 354 360 366 372 378 384"
 BASE_URL="https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
 OUTPUT_DIR="data/grib"
 CYCLES="00 06 12 18"
@@ -101,18 +102,18 @@ if ! url_exists "$TEST_URL"; then
     exit 1
 fi
 
+# Count files to download
+TOTAL_FILES=$(echo $FORECAST_HOURS | wc -w | tr -d ' ')
+
 echo ""
 echo "========================================"
 echo "Downloading WaveWatch III Forecast"
 echo "========================================"
 echo "Run:    ${RUN_DATE} ${RUN_CYCLE}z"
 echo "Output: ${OUTPUT_DIR}/"
-echo "Files:  17 forecast hours (f000-f384)"
+echo "Files:  ${TOTAL_FILES} forecast hours (f000-f384, 3h/6h intervals)"
 echo "========================================"
 echo ""
-
-# Count files to download
-TOTAL_FILES=17
 CURRENT=0
 DOWNLOADED=0
 SKIPPED=0
@@ -182,7 +183,7 @@ echo ""
 echo "Files in ${OUTPUT_DIR}/:"
 ls -lh "$OUTPUT_DIR"/*.grib2 2>/dev/null || echo "(no files)"
 
-if [ "$DOWNLOADED" -lt 4 ]; then
+if [ "$DOWNLOADED" -lt 40 ]; then
     echo "ERROR: Too few files downloaded ($DOWNLOADED). Failing."
     exit 1
 fi
