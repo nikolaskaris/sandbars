@@ -89,14 +89,7 @@ export default function TimeSlider({
   // Calculate display values
   const daysDiff = validTime && referenceTime ? getDaysDiff(validTime, referenceTime) : 0;
   const dateDisplay = validTime ? formatDateTime(validTime) : 'Loading...';
-  const isNow = (() => {
-    if (!validTime) return false;
-    const validDate = new Date(validTime);
-    if (isNaN(validDate.getTime())) return false;
-    const hoursDiff = Math.abs(Date.now() - validDate.getTime()) / (1000 * 60 * 60);
-    return hoursDiff <= 3;
-  })();
-  const daysLabel = isNow ? 'now' : `+${daysDiff} days`;
+  const daysLabel = `+${daysDiff} days`;
   const ticks = getTickDates(referenceTime);
 
   return (
