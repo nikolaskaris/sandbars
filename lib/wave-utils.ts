@@ -5,6 +5,27 @@
 // Forecast hours available (every 24 hours for 16 days)
 export const FORECAST_HOURS = [0, 24, 48, 72, 96, 120, 144, 168, 192, 216, 240, 264, 288, 312, 336, 360, 384];
 
+/**
+ * Find the forecast hour closest to the current time, given a model run time.
+ */
+export function findNearestForecastHour(modelRunTime: string | null): number {
+  if (!modelRunTime) return 0;
+  const modelRun = new Date(modelRunTime);
+  if (isNaN(modelRun.getTime())) return 0;
+  const hoursElapsed = (Date.now() - modelRun.getTime()) / (1000 * 60 * 60);
+
+  let closest = FORECAST_HOURS[0];
+  let minDiff = Infinity;
+  for (const hour of FORECAST_HOURS) {
+    const diff = Math.abs(hoursElapsed - hour);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = hour;
+    }
+  }
+  return closest;
+}
+
 export const COMPASS_DIRECTIONS = [
   'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'

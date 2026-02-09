@@ -20,6 +20,7 @@ import {
   degreesToCompass,
   formatTime,
   parseJsonProperty,
+  findNearestForecastHour,
 } from '@/lib/wave-utils';
 
 // =============================================================================
@@ -622,6 +623,13 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           enrichWaveData(waveData);
           if (waveData.metadata) {
             setMetadata(waveData.metadata);
+
+            // Initialize slider to forecast hour nearest to current time
+            const nearestHour = findNearestForecastHour(waveData.metadata.model_run);
+            if (nearestHour !== 0) {
+              setCurrentHour(nearestHour);
+              loadForecastData(nearestHour);
+            }
           }
           setCurrentData(waveData);
           setWaveError(null);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import { FORECAST_HOURS } from '@/lib/wave-utils';
+import { FORECAST_HOURS, findNearestForecastHour } from '@/lib/wave-utils';
 
 interface TimeSliderProps {
   currentHour: number;
@@ -89,7 +89,9 @@ export default function TimeSlider({
   // Calculate display values
   const daysDiff = validTime && referenceTime ? getDaysDiff(validTime, referenceTime) : 0;
   const dateDisplay = validTime ? formatDateTime(validTime) : 'Loading...';
-  const daysLabel = daysDiff === 0 ? 'Now' : `+${daysDiff} days`;
+  const nowHour = findNearestForecastHour(referenceTime);
+  const isNow = currentHour === nowHour;
+  const daysLabel = isNow ? 'now' : `+${daysDiff} days`;
   const ticks = getTickDates(referenceTime);
 
   return (
@@ -211,7 +213,7 @@ export default function TimeSlider({
           marginTop: 4,
         }}
       >
-        <span>Now</span>
+        <span>Today</span>
         <span>+16 days</span>
       </div>
 
