@@ -56,11 +56,19 @@ function findNearestFeature(
   return nearest;
 }
 
+function parseValidTime(validTime: string | undefined): Date | null {
+  if (!validTime) return null;
+  const date = new Date(validTime);
+  if (isNaN(date.getTime())) return null;
+  return date;
+}
+
 function groupByDay(entries: ForecastEntry[]): DayGroup[] {
   const groups: Map<string, ForecastEntry[]> = new Map();
 
   for (const entry of entries) {
-    const date = new Date(entry.validTime);
+    const date = parseValidTime(entry.validTime);
+    if (!date) continue;
     const dateKey = date.toISOString().slice(0, 10);
     const existing = groups.get(dateKey);
     if (existing) {
@@ -337,11 +345,14 @@ export default function SpotPanel({ location, onClose }: SpotPanelProps) {
             {/* Entries for this day */}
             {day.entries.map((entry) => {
               const primarySwell = entry.swells[0];
-              const timeStr = new Date(entry.validTime).toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-              });
+              const parsedTime = parseValidTime(entry.validTime);
+              const timeStr = parsedTime
+                ? parsedTime.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })
+                : `+${entry.forecastHour}h`;
 
               return (
                 <div
