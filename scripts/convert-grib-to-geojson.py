@@ -13,6 +13,7 @@ Output: public/data/wave-data-f000.geojson
 
 import glob
 import json
+import math
 import os
 import re
 import shutil
@@ -21,6 +22,7 @@ from datetime import datetime
 import cfgrib
 import numpy as np
 from PIL import Image
+from scipy.ndimage import map_coordinates
 
 # Configuration
 GRIB_DIR = "data/grib"
@@ -30,8 +32,11 @@ MIN_SWELL_HEIGHT = 0.1  # Minimum swell height to include
 
 # PNG raster configuration
 PNG_WIDTH = 720
-PNG_HEIGHT = 360
+PNG_HEIGHT = 720  # Square for Web Mercator projection
 LUT_SIZE = 1024
+
+# Web Mercator limits (standard for web maps)
+MAX_LATITUDE = 85.051129  # degrees — Mercator undefined at poles
 
 # Color ramps: list of (normalized_position, R, G, B, A)
 # Wave height: 0-15m, blue → cyan → green → yellow → red
@@ -138,11 +143,55 @@ def apply_color_lut(grid, lut, min_val, max_val):
     return rgba
 
 
+def reproject_to_mercator(equirect_array, output_height=PNG_HEIGHT, output_width=PNG_WIDTH):
+    """Vectorized reprojection from equirectangular to Web Mercator.
+
+    Input: equirect_array with shape (lat, lon) where lat goes from +90 (top)
+           to -90 (bottom) and lon goes from -180 (left) to +180 (right).
+    Output: Mercator array with shape (output_height, output_width), clipped
+            to ±MAX_LATITUDE.
+    """
+    in_height, in_width = equirect_array.shape
+
+    # Create output coordinate grids
+    out_y = np.arange(output_height)
+    out_x = np.arange(output_width)
+    out_xx, out_yy = np.meshgrid(out_x, out_y)
+
+    # Convert output y to latitude via inverse Mercator
+    y_norm = out_yy / (output_height - 1)  # 0 (top/north) to 1 (bottom/south)
+    y_max = math.log(math.tan(math.pi / 4 + math.radians(MAX_LATITUDE) / 2))
+    y_merc = y_max - y_norm * (2 * y_max)
+    lat = np.degrees(2 * np.arctan(np.exp(y_merc)) - np.pi / 2)
+
+    # Convert latitude to input row indices (input: +90 at row 0, -90 at last row)
+    in_yy = (90 - lat) / 180 * (in_height - 1)
+
+    # Longitude is linear in both projections
+    in_xx = out_xx / (output_width - 1) * (in_width - 1)
+
+    # Use scipy map_coordinates for bilinear interpolation
+    # NaN handling: replace NaN with 0 for interpolation, then restore
+    nan_mask = np.isnan(equirect_array)
+    safe_array = equirect_array.copy()
+    safe_array[nan_mask] = 0
+
+    coords = np.array([in_yy, in_xx])
+    output = map_coordinates(safe_array, coords, order=1, mode='constant', cval=0)
+
+    # Build a NaN mask in the output: interpolate the mask to detect NaN regions
+    nan_float = nan_mask.astype(np.float32)
+    nan_interp = map_coordinates(nan_float, coords, order=1, mode='constant', cval=1)
+    output[nan_interp > 0.5] = np.nan
+
+    return output
+
+
 def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
     """Generate 3 PNG rasters (wave height, period, wind) from full-res GRIB grids.
 
     Input grids are 721x1440 (0.25° global, 0-360 lon).
-    Output PNGs are 360x720 (0.5°, -180 to 180 lon).
+    Output PNGs are 720x720 Web Mercator (±85.05° lat, -180 to 180 lon).
     """
     layers = [
         ("wave-height", swh, WAVE_HEIGHT_LUT, WAVE_HEIGHT_MIN, WAVE_HEIGHT_MAX),
@@ -153,10 +202,10 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
     for name, data, lut, vmin, vmax in layers:
         # Shift longitude from 0-360 to -180-180
         shifted = np.roll(data, data.shape[1] // 2, axis=1)
-        # Downsample from 721x1440 to 360x720
-        downsampled = shifted[::2, ::2][:PNG_HEIGHT, :PNG_WIDTH]
+        # Reproject from equirectangular to Web Mercator
+        mercator = reproject_to_mercator(shifted)
         # Apply color mapping
-        rgba = apply_color_lut(downsampled, lut, vmin, vmax)
+        rgba = apply_color_lut(mercator, lut, vmin, vmax)
         # Save PNG
         img = Image.fromarray(rgba, 'RGBA')
         png_path = os.path.join(output_dir, f"{name}-f{forecast_hour:03d}.png")
