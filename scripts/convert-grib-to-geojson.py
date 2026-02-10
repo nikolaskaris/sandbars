@@ -23,6 +23,7 @@ from datetime import datetime
 import cfgrib
 import numpy as np
 from PIL import Image
+from global_land_mask import globe
 from scipy.ndimage import map_coordinates
 
 # Configuration
@@ -144,6 +145,39 @@ def apply_color_lut(grid, lut, min_val, max_val):
     return rgba
 
 
+_land_mask_cache = None
+
+
+def create_land_mask_for_mercator(width=PNG_WIDTH, height=PNG_HEIGHT):
+    """Create a boolean land mask for a Web Mercator grid.
+
+    Returns numpy array where True = land, False = ocean.
+    """
+    x_indices = np.arange(width)
+    y_indices = np.arange(height)
+
+    # Convert x to longitude (-180 to +180)
+    lons = -180 + (x_indices / (width - 1)) * 360
+
+    # Convert y to latitude via inverse Mercator
+    y_max = np.log(np.tan(np.pi / 4 + np.radians(MAX_LATITUDE) / 2))
+    y_normalized = y_indices / (height - 1)
+    y_mercator = y_max - y_normalized * (2 * y_max)
+    lats = np.degrees(2 * np.arctan(np.exp(y_mercator)) - np.pi / 2)
+
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+    return globe.is_land(lat_grid, lon_grid)
+
+
+def get_land_mask():
+    """Get or create cached land mask."""
+    global _land_mask_cache
+    if _land_mask_cache is None:
+        print("  Generating land mask...")
+        _land_mask_cache = create_land_mask_for_mercator()
+    return _land_mask_cache
+
+
 def reproject_to_mercator(equirect_array, output_height=PNG_HEIGHT, output_width=PNG_WIDTH):
     """Vectorized reprojection from equirectangular to Web Mercator.
 
@@ -207,6 +241,9 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
         mercator = reproject_to_mercator(shifted)
         # Apply color mapping
         rgba = apply_color_lut(mercator, lut, vmin, vmax)
+        # Apply land mask — set land pixels to fully transparent
+        land_mask = get_land_mask()
+        rgba[land_mask] = [0, 0, 0, 0]
         # Save PNG
         img = Image.fromarray(rgba, 'RGBA')
         png_path = os.path.join(output_dir, f"{name}-f{forecast_hour:03d}.png")
