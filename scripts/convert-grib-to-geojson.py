@@ -243,6 +243,7 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
     shww = ds_wave.shww.values
     mpww = ds_wave.mpww.values
     wvdir = ds_wave.wvdir.values
+    perpw = ds_wave.perpw.values
 
     # Swell partition data
     swdir = ds_swell.swdir.values
@@ -250,7 +251,7 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
     mpts = ds_swell.mpts.values
 
     # Generate PNG rasters from full-resolution grids
-    generate_raster_pngs(swh, mpts[0], ws, forecast_hour, OUTPUT_DIR)
+    generate_raster_pngs(swh, perpw, ws, forecast_hour, OUTPUT_DIR)
 
     features = []
     skipped_land = 0
