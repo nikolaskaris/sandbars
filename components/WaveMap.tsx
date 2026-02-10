@@ -33,6 +33,7 @@ const LEGEND_STYLES = {
     position: 'absolute' as const,
     bottom: 100,
     left: 20,
+    zIndex: 1000,
     background: 'white',
     padding: '12px 16px',
     borderRadius: 8,
