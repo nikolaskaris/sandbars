@@ -48,10 +48,13 @@ async function getFilesToUpload() {
     return files;
   }
 
-  // Get all wave-data-f*.geojson files
+  // Get all wave-data-f*.geojson files and PNG raster files
   const allFiles = fs.readdirSync(DATA_DIR);
   for (const file of allFiles) {
     if (file.match(/^wave-data-f\d+\.geojson$/)) {
+      files.push(file);
+    }
+    if (file.match(/^(wave-height|wave-period|wind-speed)-f\d+\.png$/)) {
       files.push(file);
     }
   }
@@ -67,11 +70,12 @@ async function getFilesToUpload() {
 async function uploadFile(fileName) {
   const filePath = path.join(DATA_DIR, fileName);
   const fileContent = fs.readFileSync(filePath);
+  const contentType = fileName.endsWith('.png') ? 'image/png' : 'application/json';
 
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(fileName, fileContent, {
-      contentType: 'application/json',
+      contentType,
       upsert: true, // Overwrite if exists
     });
 

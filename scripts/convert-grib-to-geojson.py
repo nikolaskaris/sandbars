@@ -20,12 +20,57 @@ from datetime import datetime
 
 import cfgrib
 import numpy as np
+from PIL import Image
 
 # Configuration
 GRIB_DIR = "data/grib"
 OUTPUT_DIR = "public/data"
 SAMPLE_STEP = 24  # Every 6° (grid is 0.25°, so 6/0.25 = 24)
 MIN_SWELL_HEIGHT = 0.1  # Minimum swell height to include
+
+# PNG raster configuration
+PNG_WIDTH = 720
+PNG_HEIGHT = 360
+LUT_SIZE = 1024
+
+# Color ramps: list of (normalized_position, R, G, B, A)
+# Wave height: 0-15m, blue → cyan → green → yellow → red
+WAVE_HEIGHT_COLORS = [
+    (0.0,   30,  60, 180, 160),   # deep blue
+    (0.07,  0,  120, 200, 180),   # blue
+    (0.13,  0,  180, 220, 190),   # cyan
+    (0.27,  0,  200, 100, 200),   # green
+    (0.47, 200, 220,  50, 210),   # yellow
+    (0.67, 240, 140,  30, 220),   # orange
+    (1.0,  220,  30,  30, 230),   # red
+]
+WAVE_HEIGHT_MIN = 0.0
+WAVE_HEIGHT_MAX = 15.0
+
+# Wave period: 0-25s, blue → teal → green → purple
+WAVE_PERIOD_COLORS = [
+    (0.0,   40,  60, 180, 160),   # blue
+    (0.2,   0,  140, 200, 180),   # teal
+    (0.4,   0,  180, 120, 200),   # green-teal
+    (0.6,  80,  200,  80, 210),   # green
+    (0.8,  180, 100, 200, 220),   # purple
+    (1.0,  140,  40, 180, 230),   # deep purple
+]
+WAVE_PERIOD_MIN = 0.0
+WAVE_PERIOD_MAX = 25.0
+
+# Wind speed: 0-30 m/s, gray → green → yellow → red
+WIND_SPEED_COLORS = [
+    (0.0,  100, 120, 140, 140),   # gray
+    (0.17,  60, 160, 120, 170),   # teal
+    (0.33,  40, 190,  80, 190),   # green
+    (0.5,  160, 210,  50, 200),   # yellow-green
+    (0.67, 220, 180,  30, 210),   # yellow-orange
+    (0.83, 240, 100,  30, 220),   # orange
+    (1.0,  200,  30,  30, 230),   # red
+]
+WIND_SPEED_MIN = 0.0
+WIND_SPEED_MAX = 30.0
 
 
 def round1(val):
@@ -48,6 +93,74 @@ def extract_forecast_hour(filename):
     if match:
         return int(match.group(1))
     return None
+
+
+def build_color_lut(color_ramp, lut_size=LUT_SIZE):
+    """Pre-build a (lut_size, 4) uint8 lookup table from color stops."""
+    lut = np.zeros((lut_size, 4), dtype=np.uint8)
+    for i in range(len(color_ramp) - 1):
+        pos0, r0, g0, b0, a0 = color_ramp[i]
+        pos1, r1, g1, b1, a1 = color_ramp[i + 1]
+        idx0 = int(pos0 * (lut_size - 1))
+        idx1 = int(pos1 * (lut_size - 1))
+        n = idx1 - idx0
+        if n <= 0:
+            continue
+        t = np.linspace(0, 1, n, endpoint=False).reshape(-1, 1)
+        seg = (1 - t) * np.array([r0, g0, b0, a0]) + t * np.array([r1, g1, b1, a1])
+        lut[idx0:idx1] = seg.astype(np.uint8)
+    # Fill last entry
+    lut[-1] = np.array(color_ramp[-1][1:], dtype=np.uint8)
+    return lut
+
+
+# Pre-build LUTs at module load
+WAVE_HEIGHT_LUT = build_color_lut(WAVE_HEIGHT_COLORS)
+WAVE_PERIOD_LUT = build_color_lut(WAVE_PERIOD_COLORS)
+WIND_SPEED_LUT = build_color_lut(WIND_SPEED_COLORS)
+
+
+def apply_color_lut(grid, lut, min_val, max_val):
+    """Map a 2D float grid to an RGBA image using a prebuilt LUT.
+
+    NaN pixels become fully transparent.
+    """
+    nan_mask = np.isnan(grid)
+    # Normalize to [0, 1]
+    normalized = np.clip((grid - min_val) / (max_val - min_val), 0, 1)
+    normalized[nan_mask] = 0
+    # Map to LUT indices
+    indices = (normalized * (len(lut) - 1)).astype(np.int32)
+    # Look up colors
+    rgba = lut[indices]
+    # Set NaN pixels to transparent
+    rgba[nan_mask] = [0, 0, 0, 0]
+    return rgba
+
+
+def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
+    """Generate 3 PNG rasters (wave height, period, wind) from full-res GRIB grids.
+
+    Input grids are 721x1440 (0.25° global, 0-360 lon).
+    Output PNGs are 360x720 (0.5°, -180 to 180 lon).
+    """
+    layers = [
+        ("wave-height", swh, WAVE_HEIGHT_LUT, WAVE_HEIGHT_MIN, WAVE_HEIGHT_MAX),
+        ("wave-period", primary_period, WAVE_PERIOD_LUT, WAVE_PERIOD_MIN, WAVE_PERIOD_MAX),
+        ("wind-speed", ws, WIND_SPEED_LUT, WIND_SPEED_MIN, WIND_SPEED_MAX),
+    ]
+
+    for name, data, lut, vmin, vmax in layers:
+        # Shift longitude from 0-360 to -180-180
+        shifted = np.roll(data, data.shape[1] // 2, axis=1)
+        # Downsample from 721x1440 to 360x720
+        downsampled = shifted[::2, ::2][:PNG_HEIGHT, :PNG_WIDTH]
+        # Apply color mapping
+        rgba = apply_color_lut(downsampled, lut, vmin, vmax)
+        # Save PNG
+        img = Image.fromarray(rgba, 'RGBA')
+        png_path = os.path.join(output_dir, f"{name}-f{forecast_hour:03d}.png")
+        img.save(png_path, 'PNG', optimize=True)
 
 
 def convert_grib_file(grib_path, output_path, file_num, total_files):
@@ -85,6 +198,9 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
     swdir = ds_swell.swdir.values
     shts = ds_swell.shts.values
     mpts = ds_swell.mpts.values
+
+    # Generate PNG rasters from full-resolution grids
+    generate_raster_pngs(swh, mpts[0], ws, forecast_hour, OUTPUT_DIR)
 
     features = []
     skipped_land = 0
@@ -224,11 +340,18 @@ def main():
     print(f"Output directory:   {OUTPUT_DIR}/")
 
     # List output files
-    print("\nOutput files:")
+    print("\nGeoJSON files:")
     output_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "wave-data*.geojson")))
     for f in output_files:
         size_kb = os.path.getsize(f) / 1024
         print(f"  {os.path.basename(f):30} {size_kb:6.1f} KB")
+
+    # List PNG raster files
+    png_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.png")))
+    if png_files:
+        print(f"\nPNG raster files: {len(png_files)}")
+        total_png_kb = sum(os.path.getsize(f) for f in png_files) / 1024
+        print(f"  Total size: {total_png_kb:.0f} KB ({total_png_kb/1024:.1f} MB)")
 
 
 if __name__ == "__main__":

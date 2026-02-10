@@ -21,7 +21,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install xarray cfgrib eccodes numpy requests
+          pip install xarray cfgrib eccodes numpy requests Pillow
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -53,5 +53,6 @@ jobs:
           echo "## Forecast Data Updated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Wave forecast files: $(ls -1 public/data/wave-data-f*.geojson 2>/dev/null | wc -l | tr -d ' ')" >> $GITHUB_STEP_SUMMARY
+          echo "- PNG raster files: $(ls -1 public/data/*.png 2>/dev/null | wc -l | tr -d ' ')" >> $GITHUB_STEP_SUMMARY
           echo "- Buoy observations: $(ls -1 public/data/buoy-observations.geojson 2>/dev/null && echo 'Yes' || echo 'No')" >> $GITHUB_STEP_SUMMARY
           echo "- Timestamp: $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
