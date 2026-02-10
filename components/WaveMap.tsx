@@ -8,6 +8,7 @@ import SearchBar from './SearchBar';
 import SpotPanel from './SpotPanel';
 import VectorOverlay from './VectorOverlay';
 import LayerToggle, { MapLayer } from './LayerToggle';
+import DeckGLOverlay from './DeckGLOverlay';
 import { DATA_URLS } from '@/lib/config';
 import {
   SwellData,
@@ -406,6 +407,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
 
   // Layer visibility
   const [showBuoys, setShowBuoys] = useState(true);
+  const [useHeatmap, setUseHeatmap] = useState(true);
 
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
@@ -817,6 +819,14 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} data-testid="map-container" style={{ width: '100%', height: '100%' }} />
 
+      {/* Deck.gl Heatmap Overlay */}
+      <DeckGLOverlay
+        map={map.current}
+        data={currentData}
+        activeLayer={activeLayer}
+        enabled={useHeatmap}
+      />
+
       {/* Search Bar + Layer Toggle */}
       <div style={{
         position: 'absolute',
@@ -965,6 +975,29 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[1]}</span>
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[2]}</span>
         </div>
+
+        {/* Heatmap Toggle */}
+        <label
+          data-testid="heatmap-toggle"
+          style={{
+            ...LEGEND_STYLES.toggleLabel,
+            cursor: 'pointer',
+            marginBottom: 4,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={useHeatmap}
+            onChange={(e) => setUseHeatmap(e.target.checked)}
+            style={{
+              ...LEGEND_STYLES.checkbox,
+              cursor: 'pointer',
+            }}
+          />
+          <span style={{ color: COLORS.textMuted }}>
+            Smooth Heatmap
+          </span>
+        </label>
 
         {/* Buoy Toggle */}
         <label
