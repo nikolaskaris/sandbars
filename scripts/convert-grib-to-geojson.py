@@ -202,7 +202,7 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
 
     for name, data, lut, vmin, vmax in layers:
         # Shift longitude from 0-360 to -180-180
-        shifted = np.roll(data, data.shape[1] // 2, axis=1)
+        shifted = np.roll(data, -data.shape[1] // 2, axis=1)
         # Reproject from equirectangular to Web Mercator
         mercator = reproject_to_mercator(shifted)
         # Apply color mapping
