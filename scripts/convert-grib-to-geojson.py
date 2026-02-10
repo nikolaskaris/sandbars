@@ -17,6 +17,7 @@ import math
 import os
 import re
 import shutil
+import sys
 from datetime import datetime
 
 import cfgrib
@@ -360,18 +361,24 @@ def main():
 
     total_features = 0
     f000_output = None
+    failed_files = []
 
     # Process each file
     for i, grib_file in enumerate(grib_files, 1):
         forecast_hour = extract_forecast_hour(grib_file)
         output_file = os.path.join(OUTPUT_DIR, f"wave-data-f{forecast_hour:03d}.geojson")
 
-        features_count, fhour = convert_grib_file(grib_file, output_file, i, len(grib_files))
-        total_features += features_count
+        try:
+            features_count, fhour = convert_grib_file(grib_file, output_file, i, len(grib_files))
+            total_features += features_count
 
-        # Track f000 for backward compatibility copy
-        if forecast_hour == 0:
-            f000_output = output_file
+            # Track f000 for backward compatibility copy
+            if forecast_hour == 0:
+                f000_output = output_file
+        except Exception as e:
+            print(f"  WARNING: Failed to process {os.path.basename(grib_file)}: {e}")
+            failed_files.append(os.path.basename(grib_file))
+            continue
 
     # Create backward-compatible wave-data.geojson (copy of f000)
     if f000_output:
@@ -380,11 +387,13 @@ def main():
         print(f"\nCreated {legacy_output} (copy of f000)")
 
     # Print summary
+    succeeded = len(grib_files) - len(failed_files)
     print("\n" + "=" * 50)
     print("Conversion Complete!")
     print("=" * 50)
-    print(f"Files processed:    {len(grib_files)}")
-    print(f"Features per file:  ~{total_features // len(grib_files)}")
+    print(f"Files processed:    {succeeded}/{len(grib_files)}")
+    if succeeded > 0:
+        print(f"Features per file:  ~{total_features // succeeded}")
     print(f"Total features:     {total_features}")
     print(f"Output directory:   {OUTPUT_DIR}/")
 
@@ -401,6 +410,19 @@ def main():
         print(f"\nPNG raster files: {len(png_files)}")
         total_png_kb = sum(os.path.getsize(f) for f in png_files) / 1024
         print(f"  Total size: {total_png_kb:.0f} KB ({total_png_kb/1024:.1f} MB)")
+
+    # Report failures
+    if failed_files:
+        print(f"\nWARNING: {len(failed_files)} file(s) failed to process:")
+        for f in failed_files:
+            print(f"    - {f}")
+
+        success_rate = succeeded / len(grib_files)
+        if success_rate < 0.9:
+            print(f"\nError: Too many failures ({len(failed_files)}/{len(grib_files)})")
+            sys.exit(1)
+        else:
+            print(f"\n{succeeded}/{len(grib_files)} files processed successfully")
 
 
 if __name__ == "__main__":
