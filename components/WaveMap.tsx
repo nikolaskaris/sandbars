@@ -95,44 +95,26 @@ const COLORS = {
 // =============================================================================
 
 const LAYER_CONFIGS: Record<MapLayer, {
-  property: string;
-  colorStops: (string | number)[];
   legendTitle: string;
   legendGradient: string;
   legendLabels: [string, string, string];
 }> = {
   waveHeight: {
-    property: 'waveHeight',
-    colorStops: [0, '#3b82f6', 3, '#eab308', 6, '#ef4444', 10, '#7f1d1d'],
     legendTitle: 'Wave Height',
     legendGradient: 'linear-gradient(to right, #3b82f6, #eab308, #ef4444)',
     legendLabels: ['0m', '3m', '6m+'],
   },
   wavePeriod: {
-    property: 'wavePeriod',
-    colorStops: [5, '#87CEEB', 12, '#22c55e', 20, '#7c3aed'],
     legendTitle: 'Wave Period',
     legendGradient: 'linear-gradient(to right, #87CEEB, #22c55e, #7c3aed)',
     legendLabels: ['5s', '12s', '20s+'],
   },
   wind: {
-    property: 'windSpeed',
-    colorStops: [0, '#d1d5db', 10, '#22c55e', 20, '#ef4444'],
     legendTitle: 'Wind Speed',
     legendGradient: 'linear-gradient(to right, #d1d5db, #22c55e, #ef4444)',
     legendLabels: ['0 m/s', '10', '20+'],
   },
 };
-
-function getCircleColorExpression(layer: MapLayer): maplibregl.ExpressionSpecification {
-  const config = LAYER_CONFIGS[layer];
-  return [
-    'interpolate',
-    ['linear'],
-    ['get', config.property],
-    ...config.colorStops,
-  ] as maplibregl.ExpressionSpecification;
-}
 
 /**
  * Add top-level wavePeriod and windSpeed properties so MapLibre expressions can access them.
@@ -252,37 +234,6 @@ function formatBuoyPopup(properties: BuoyFeatureProperties): string {
 // Map Layer Setup Functions (Issue #9)
 // =============================================================================
 
-function setupWaveLayer(
-  mapInstance: maplibregl.Map,
-  data: GeoJSONData<WaveFeatureProperties>
-): void {
-  mapInstance.addSource('waves', {
-    type: 'geojson',
-    data: data as unknown as GeoJSON.FeatureCollection,
-  });
-
-  mapInstance.addLayer({
-    id: 'wave-circles',
-    type: 'circle',
-    source: 'waves',
-    paint: {
-      'circle-radius': 6,
-      'circle-color': [
-        'interpolate',
-        ['linear'],
-        ['get', 'waveHeight'],
-        0, '#3b82f6',
-        3, '#eab308',
-        6, '#ef4444',
-        10, '#7f1d1d',
-      ],
-      'circle-opacity': 0.7,
-      'circle-stroke-width': 1,
-      'circle-stroke-color': '#ffffff',
-      'circle-stroke-opacity': 0.5,
-    },
-  });
-}
 
 function setupBuoyLayer(
   mapInstance: maplibregl.Map,
@@ -407,7 +358,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
 
   // Layer visibility
   const [showBuoys, setShowBuoys] = useState(true);
-  const [useHeatmap, setUseHeatmap] = useState(true);
 
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
@@ -515,15 +465,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         setMetadata(data.metadata);
       }
       setCurrentData(data);
-
-      if (map.current) {
-        const source = map.current.getSource('waves') as maplibregl.GeoJSONSource;
-        if (source) {
-          source.setData(data);
-        } else {
-          setupWaveLayer(map.current, data);
-        }
-      }
     } catch (error) {
       console.error(`Failed to load forecast data for hour ${hour}:`, error);
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -621,12 +562,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     }
   }, [showBuoys]);
 
-  // Update circle color when active layer changes
-  useEffect(() => {
-    if (!map.current || !map.current.getLayer('wave-circles')) return;
-    map.current.setPaintProperty('wave-circles', 'circle-color', getCircleColorExpression(activeLayer));
-  }, [activeLayer]);
-
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -682,8 +617,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           }
           setCurrentData(waveData);
           setWaveError(null);
-
-          setupWaveLayer(map.current, waveData);
         } else {
           console.error('Failed to load wave data:', waveResult.reason);
           if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -819,12 +752,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} data-testid="map-container" style={{ width: '100%', height: '100%' }} />
 
-      {/* Deck.gl Heatmap Overlay */}
+      {/* Deck.gl Raster Overlay */}
       <DeckGLOverlay
         map={map.current}
-        data={currentData}
+        forecastHour={currentHour}
         activeLayer={activeLayer}
-        enabled={useHeatmap}
+        opacity={0.8}
       />
 
       {/* Search Bar + Layer Toggle */}
@@ -975,29 +908,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[1]}</span>
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[2]}</span>
         </div>
-
-        {/* Heatmap Toggle */}
-        <label
-          data-testid="heatmap-toggle"
-          style={{
-            ...LEGEND_STYLES.toggleLabel,
-            cursor: 'pointer',
-            marginBottom: 4,
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={useHeatmap}
-            onChange={(e) => setUseHeatmap(e.target.checked)}
-            style={{
-              ...LEGEND_STYLES.checkbox,
-              cursor: 'pointer',
-            }}
-          />
-          <span style={{ color: COLORS.textMuted }}>
-            Smooth Heatmap
-          </span>
-        </label>
 
         {/* Buoy Toggle */}
         <label

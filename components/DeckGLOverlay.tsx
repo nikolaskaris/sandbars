@@ -2,73 +2,30 @@
 
 import { useEffect, useRef } from 'react';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { HeatmapLayer } from '@deck.gl/aggregation-layers';
+import { BitmapLayer } from '@deck.gl/layers';
 import type { MapLayer } from './LayerToggle';
-import type {
-  WaveFeatureProperties,
-  GeoJSONData,
-} from '@/lib/wave-utils';
 import type maplibregl from 'maplibre-gl';
+import { SUPABASE_STORAGE_URL } from '@/lib/config';
 
-// Color configurations matching LAYER_CONFIGS in WaveMap.tsx
-const HEATMAP_CONFIGS: Record<
-  MapLayer,
-  {
-    property: string;
-    colorDomain: [number, number];
-    colorRange: [number, number, number][];
-  }
-> = {
-  waveHeight: {
-    property: 'waveHeight',
-    colorDomain: [0, 6],
-    colorRange: [
-      [59, 130, 246],  // blue  (flat/small)
-      [100, 200, 240], // light blue
-      [234, 179, 8],   // yellow (moderate)
-      [253, 150, 60],  // orange
-      [239, 68, 68],   // red    (large)
-      [127, 29, 29],   // dark red (very large)
-    ],
-  },
-  wavePeriod: {
-    property: 'wavePeriod',
-    colorDomain: [5, 20],
-    colorRange: [
-      [135, 206, 235], // light blue (short period)
-      [80, 210, 170],  // teal
-      [34, 197, 94],   // green (medium period)
-      [80, 130, 200],  // blue-purple
-      [124, 58, 237],  // purple (long period)
-      [90, 30, 180],   // deep purple
-    ],
-  },
-  wind: {
-    property: 'windSpeed',
-    colorDomain: [0, 20],
-    colorRange: [
-      [209, 213, 219], // gray  (calm)
-      [150, 210, 150], // light green
-      [34, 197, 94],   // green (moderate)
-      [234, 179, 8],   // yellow
-      [239, 68, 68],   // red   (strong)
-      [180, 30, 30],   // dark red (very strong)
-    ],
-  },
+// Map layer names to PNG filename prefixes
+const LAYER_TO_FILENAME: Record<MapLayer, string> = {
+  waveHeight: 'wave-height',
+  wavePeriod: 'wave-period',
+  wind: 'wind-speed',
 };
 
 interface DeckGLOverlayProps {
   map: maplibregl.Map | null;
-  data: GeoJSONData<WaveFeatureProperties> | null;
+  forecastHour: number;
   activeLayer: MapLayer;
-  enabled: boolean;
+  opacity?: number;
 }
 
 export default function DeckGLOverlay({
   map,
-  data,
+  forecastHour,
   activeLayer,
-  enabled,
+  opacity = 0.8,
 }: DeckGLOverlayProps) {
   const overlayRef = useRef<MapboxOverlay | null>(null);
 
@@ -77,7 +34,6 @@ export default function DeckGLOverlay({
     if (!map) return;
 
     const overlay = new MapboxOverlay({ layers: [] });
-    // MapboxOverlay implements the same IControl interface as maplibre-gl
     map.addControl(overlay as unknown as maplibregl.IControl);
     overlayRef.current = overlay;
 
@@ -92,50 +48,24 @@ export default function DeckGLOverlay({
     };
   }, [map]);
 
-  // Update heatmap layers when data, activeLayer, or enabled state changes
+  // Update BitmapLayer when forecastHour, activeLayer, or opacity changes
   useEffect(() => {
     const overlay = overlayRef.current;
     if (!overlay) return;
 
-    if (!enabled || !data?.features?.length) {
-      overlay.setProps({ layers: [] });
-      return;
-    }
+    const paddedHour = String(forecastHour).padStart(3, '0');
+    const filenamePrefix = LAYER_TO_FILENAME[activeLayer];
+    const imageUrl = `${SUPABASE_STORAGE_URL}/${filenamePrefix}-f${paddedHour}.png`;
 
-    const config = HEATMAP_CONFIGS[activeLayer];
-
-    const heatmapLayer = new HeatmapLayer({
-      id: 'wave-heatmap',
-      data: data.features,
-      getPosition: (d: GeoJSON.Feature) =>
-        (d.geometry as GeoJSON.Point).coordinates as [number, number],
-      getWeight: (d: GeoJSON.Feature) => {
-        const val = (d.properties as Record<string, number>)?.[config.property];
-        return val ?? 0;
-      },
-      aggregation: 'MEAN',
-      radiusPixels: 50,
-      intensity: 1,
-      threshold: 0.03,
-      colorDomain: config.colorDomain,
-      colorRange: config.colorRange,
-      debounceTimeout: 200,
+    const layer = new BitmapLayer({
+      id: 'wave-raster',
+      image: imageUrl,
+      bounds: [-180, -90, 180, 90],
+      opacity,
     });
 
-    overlay.setProps({ layers: [heatmapLayer] });
-  }, [data, activeLayer, enabled]);
-
-  // Toggle the MapLibre circle layer visibility when heatmap is enabled/disabled
-  useEffect(() => {
-    if (!map) return;
-    if (map.getLayer('wave-circles')) {
-      map.setLayoutProperty(
-        'wave-circles',
-        'visibility',
-        enabled ? 'none' : 'visible'
-      );
-    }
-  }, [map, enabled]);
+    overlay.setProps({ layers: [layer] });
+  }, [forecastHour, activeLayer, opacity]);
 
   return null;
 }

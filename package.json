@@ -23,7 +23,6 @@
     "db:migrate": "echo 'Run the SQL in supabase/migrations/001_wave_grid.sql in your Supabase SQL editor'"
   },
   "dependencies": {
-    "@deck.gl/aggregation-layers": "^9.2.6",
     "@deck.gl/core": "^9.2.6",
     "@deck.gl/layers": "^9.2.6",
     "@deck.gl/mapbox": "^9.2.6",
