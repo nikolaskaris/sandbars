@@ -21,7 +21,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install xarray cfgrib eccodes numpy requests Pillow scipy global-land-mask
+          pip install xarray cfgrib eccodes numpy requests Pillow scipy
 
       - name: Install Node.js
         uses: actions/setup-node@v4

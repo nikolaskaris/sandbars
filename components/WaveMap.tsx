@@ -586,6 +586,15 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       maxWidth: '350px',
     });
 
+    // Style base map water layer to match our 0m wave color
+    map.current.on('style.load', () => {
+      if (!map.current) return;
+      if (map.current.getLayer('water')) {
+        map.current.setPaintProperty('water', 'fill-color', '#1E3CB4');
+        map.current.setPaintProperty('water', 'fill-opacity', 0.6);
+      }
+    });
+
     map.current.on('load', async () => {
       if (!map.current || !popup.current) return;
 

@@ -22,8 +22,8 @@ from datetime import datetime
 
 import cfgrib
 import numpy as np
+from pathlib import Path
 from PIL import Image
-from global_land_mask import globe
 from scipy.ndimage import map_coordinates
 
 # Configuration
@@ -127,11 +127,10 @@ WAVE_PERIOD_LUT = build_color_lut(WAVE_PERIOD_COLORS)
 WIND_SPEED_LUT = build_color_lut(WIND_SPEED_COLORS)
 
 
-def apply_color_lut(grid, lut, min_val, max_val, ocean_mask=None):
+def apply_color_lut(grid, lut, min_val, max_val):
     """Map a 2D float grid to an RGBA image using a prebuilt LUT.
 
-    NaN pixels become fully transparent, unless ocean_mask is provided,
-    in which case ocean NaN pixels get the base color (vmin).
+    NaN pixels become fully transparent (base map shows through).
     """
     nan_mask = np.isnan(grid)
     # Normalize to [0, 1]
@@ -141,58 +140,27 @@ def apply_color_lut(grid, lut, min_val, max_val, ocean_mask=None):
     indices = (normalized * (len(lut) - 1)).astype(np.int32)
     # Look up colors
     rgba = lut[indices]
-
-    if ocean_mask is not None:
-        # Ocean pixels with no data get base color (index 0 = vmin color)
-        ocean_no_data = nan_mask & ocean_mask
-        rgba[ocean_no_data] = lut[0]
-
-        # Land pixels (and any remaining NaN) become transparent
-        land_or_other_nan = nan_mask & ~ocean_mask
-        rgba[land_or_other_nan] = [0, 0, 0, 0]
-    else:
-        # Original behavior: all NaN becomes transparent
-        rgba[nan_mask] = [0, 0, 0, 0]
+    # NaN values become transparent (base map shows through)
+    rgba[nan_mask] = [0, 0, 0, 0]
 
     return rgba
 
 
 _land_mask_cache = None
-_ocean_mask_cache = None
 
 
-def create_land_mask_for_mercator(width=PNG_WIDTH, height=PNG_HEIGHT):
-    """Create boolean masks for land and ocean in Web Mercator projection.
-
-    Returns: tuple of (land_mask, ocean_mask) numpy arrays
-             land_mask: True = land, False = water
-             ocean_mask: True = water, False = land
-    """
-    x_indices = np.arange(width)
-    y_indices = np.arange(height)
-
-    # Convert x to longitude (-180 to +180)
-    lons = -180 + (x_indices / (width - 1)) * 360
-
-    # Convert y to latitude via inverse Mercator
-    y_max = np.log(np.tan(np.pi / 4 + np.radians(MAX_LATITUDE) / 2))
-    y_normalized = y_indices / (height - 1)
-    y_mercator = y_max - y_normalized * (2 * y_max)
-    lats = np.degrees(2 * np.arctan(np.exp(y_mercator)) - np.pi / 2)
-
-    lon_grid, lat_grid = np.meshgrid(lons, lats)
-    land_mask = globe.is_land(lat_grid, lon_grid)
-    ocean_mask = ~land_mask
-    return land_mask, ocean_mask
-
-
-def get_masks():
-    """Get or create cached land and ocean masks."""
-    global _land_mask_cache, _ocean_mask_cache
+def get_land_mask():
+    """Load land mask from pre-generated water mask file (inverted)."""
+    global _land_mask_cache
     if _land_mask_cache is None:
-        print("  Generating land/ocean masks...")
-        _land_mask_cache, _ocean_mask_cache = create_land_mask_for_mercator()
-    return _land_mask_cache, _ocean_mask_cache
+        print("  Loading land mask...")
+        mask_path = Path(__file__).parent / "water_mask_720x720.png"
+        img = Image.open(mask_path).convert('L')
+        mask_array = np.array(img)
+        # In water mask: White (255) = water, Black (0) = land
+        # Land mask: True = land
+        _land_mask_cache = mask_array == 0
+    return _land_mask_cache
 
 
 def reproject_to_mercator(equirect_array, output_height=PNG_HEIGHT, output_width=PNG_WIDTH):
@@ -251,18 +219,17 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
         ("wind-speed", ws, WIND_SPEED_LUT, WIND_SPEED_MIN, WIND_SPEED_MAX),
     ]
 
-    # Get land/ocean masks (cached after first call)
-    land_mask, ocean_mask = get_masks()
+    # Get land mask for crisp coastlines
+    land_mask = get_land_mask()
 
     for name, data, lut, vmin, vmax in layers:
         # Shift longitude from 0-360 to -180-180
         shifted = np.roll(data, -data.shape[1] // 2, axis=1)
         # Reproject from equirectangular to Web Mercator
         mercator = reproject_to_mercator(shifted)
-        # Apply color LUT with ocean fill for no-data areas
-        rgba = apply_color_lut(mercator, lut, vmin, vmax, ocean_mask=ocean_mask)
-        # Apply land mask — set land pixels to fully transparent
-        # This overrides any color that might have been set
+        # Apply color LUT (NaN becomes transparent — base map shows through)
+        rgba = apply_color_lut(mercator, lut, vmin, vmax)
+        # Apply land mask for crisp coastlines
         rgba[land_mask] = [0, 0, 0, 0]
         # Save PNG
         img = Image.fromarray(rgba, 'RGBA')
