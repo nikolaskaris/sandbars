@@ -91,6 +91,18 @@ const COLORS = {
   buoyStroke: '#333333',
 };
 
+const WATER_COLORS: Record<MapLayer, string> = {
+  waveHeight: '#1E3CB4',  // matches 0m wave height
+  wavePeriod: '#283CB4',  // matches 0s wave period
+  wind: '#1E3CB4',
+};
+
+function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
+  if (mapInstance.getLayer('water')) {
+    mapInstance.setPaintProperty('water', 'fill-color', WATER_COLORS[layer]);
+  }
+}
+
 // =============================================================================
 // Layer Configurations
 // =============================================================================
@@ -563,6 +575,13 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     }
   }, [showBuoys]);
 
+  // Update base map water color when active layer changes
+  useEffect(() => {
+    if (map.current && map.current.isStyleLoaded()) {
+      updateWaterColor(map.current, activeLayer);
+    }
+  }, [activeLayer]);
+
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -586,13 +605,13 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       maxWidth: '350px',
     });
 
-    // Style base map water layer to match our 0m wave color
+    // Style base map water layer to match active layer's 0-value color
     map.current.on('style.load', () => {
       if (!map.current) return;
       if (map.current.getLayer('water')) {
-        map.current.setPaintProperty('water', 'fill-color', '#1E3CB4');
         map.current.setPaintProperty('water', 'fill-opacity', 0.6);
       }
+      updateWaterColor(map.current, activeLayer);
     });
 
     map.current.on('load', async () => {
