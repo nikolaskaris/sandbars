@@ -60,7 +60,7 @@ export default function DeckGLOverlay({
     const layer = new BitmapLayer({
       id: 'wave-raster',
       image: imageUrl,
-      bounds: [0, -85.051129, 360, 85.051129],
+      bounds: [-180, -85.051129, 180, 85.051129],
       opacity,
     });
 
