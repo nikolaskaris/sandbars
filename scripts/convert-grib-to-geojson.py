@@ -33,8 +33,8 @@ SAMPLE_STEP = 24  # Every 6° (grid is 0.25°, so 6/0.25 = 24)
 MIN_SWELL_HEIGHT = 0.1  # Minimum swell height to include
 
 # PNG raster configuration
-PNG_WIDTH = 720
-PNG_HEIGHT = 720  # Square for Web Mercator projection
+PNG_WIDTH = 1440
+PNG_HEIGHT = 1440  # Square for Web Mercator projection
 LUT_SIZE = 1024
 
 # Web Mercator limits (standard for web maps)
@@ -150,16 +150,17 @@ _land_mask_cache = None
 
 
 def get_land_mask():
-    """Load land mask from pre-generated water mask file (inverted)."""
+    """Load land mask from pre-generated water mask file."""
     global _land_mask_cache
     if _land_mask_cache is None:
         print("  Loading land mask...")
-        mask_path = Path(__file__).parent / "water_mask_720x720.png"
+        mask_path = Path(__file__).parent / "water_mask_1440x1440.png"
         img = Image.open(mask_path).convert('L')
         mask_array = np.array(img)
-        # In water mask: White (255) = water, Black (0) = land
-        # Land mask: True = land
-        _land_mask_cache = mask_array == 0
+        # Strictly binary: 255 = water, 0 = land
+        # Land mask: True where land (pixel value < 128)
+        _land_mask_cache = mask_array < 128
+        print(f"  Land mask loaded: {_land_mask_cache.sum()} land pixels")
     return _land_mask_cache
 
 
@@ -211,7 +212,7 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
     """Generate 3 PNG rasters (wave height, period, wind) from full-res GRIB grids.
 
     Input grids are 721x1440 (0.25° global, 0-360 lon).
-    Output PNGs are 720x720 Web Mercator (±85.05° lat, -180 to 180 lon).
+    Output PNGs are 1440x1440 Web Mercator (±85.05° lat, -180 to 180 lon).
     """
     layers = [
         ("wave-height", swh, WAVE_HEIGHT_LUT, WAVE_HEIGHT_MIN, WAVE_HEIGHT_MAX),
