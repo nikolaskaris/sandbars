@@ -605,16 +605,11 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       maxWidth: '350px',
     });
 
-    // Style base map water layer and move it below deck.gl layers
+    // Style base map water layer to match active layer's 0-value color
     map.current.on('style.load', () => {
       if (!map.current) return;
       if (map.current.getLayer('water')) {
         map.current.setPaintProperty('water', 'fill-opacity', 0.6);
-        // Move water to bottom of stack so deck.gl renders above it
-        const layers = map.current.getStyle().layers;
-        if (layers && layers.length > 0) {
-          map.current.moveLayer('water', layers[0].id);
-        }
       }
       updateWaterColor(map.current, activeLayer);
     });

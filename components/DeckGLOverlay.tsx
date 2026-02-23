@@ -33,7 +33,7 @@ export default function DeckGLOverlay({
   useEffect(() => {
     if (!map) return;
 
-    const overlay = new MapboxOverlay({ interleaved: true, layers: [] });
+    const overlay = new MapboxOverlay({ layers: [] });
     map.addControl(overlay as unknown as maplibregl.IControl);
     overlayRef.current = overlay;
 
