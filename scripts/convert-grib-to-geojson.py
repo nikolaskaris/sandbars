@@ -230,8 +230,9 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
         mercator = reproject_to_mercator(shifted)
         # Apply color LUT (NaN becomes transparent — base map shows through)
         rgba = apply_color_lut(mercator, lut, vmin, vmax)
-        # Apply land mask for crisp coastlines
-        rgba[land_mask] = [0, 0, 0, 0]
+        # Apply land mask for crisp coastlines (skip for wind — renders over land)
+        if "wind" not in name:
+            rgba[land_mask] = [0, 0, 0, 0]
         # Save PNG
         img = Image.fromarray(rgba, 'RGBA')
         png_path = os.path.join(output_dir, f"{name}-f{forecast_hour:03d}.png")
