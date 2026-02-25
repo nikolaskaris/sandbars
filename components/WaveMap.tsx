@@ -93,9 +93,9 @@ const COLORS = {
 };
 
 const WATER_COLORS: Record<MapLayer, string> = {
-  waveHeight: '#B4AFA8',  // warm muted gray baseline
-  wavePeriod: '#B4AFA8',  // warm muted gray baseline
-  wind: '#B4AFA8',        // warm muted gray baseline
+  waveHeight: '#C8D8E4',  // soft warm-desaturated blue
+  wavePeriod: '#C8D8E4',  // soft warm-desaturated blue
+  wind: '#C8D8E4',        // soft warm-desaturated blue
 };
 
 function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
@@ -573,13 +573,64 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       maxWidth: '350px',
     });
 
-    // Style base map water layer to match active layer's 0-value color
+    // Warm the Carto Positron base style to match the design system
     map.current.on('style.load', () => {
       if (!map.current) return;
-      if (map.current.getLayer('water')) {
-        map.current.setPaintProperty('water', 'fill-opacity', 0.6);
+      const m = map.current;
+
+      // Water: soft warm-desaturated blue
+      if (m.getLayer('water')) {
+        m.setPaintProperty('water', 'fill-opacity', 0.6);
       }
-      updateWaterColor(map.current, activeLayer);
+      updateWaterColor(m, activeLayer);
+
+      // Land/background: warm sand tones
+      for (const id of ['background', 'land', 'landcover']) {
+        if (m.getLayer(id)) {
+          m.setPaintProperty(id, 'fill-color', '#F0EBE3');
+        }
+      }
+      // Catch background layers that use background-color instead of fill-color
+      if (m.getLayer('background')) {
+        try { m.setPaintProperty('background', 'background-color', '#F0EBE3'); } catch {}
+      }
+
+      // Parks/vegetation: very subtle warm sage
+      for (const id of ['park', 'landuse', 'landcover']) {
+        if (m.getLayer(id)) {
+          m.setPaintProperty(id, 'fill-color', '#E4DECF');
+          m.setPaintProperty(id, 'fill-opacity', 0.5);
+        }
+      }
+
+      // Buildings: nearly invisible
+      if (m.getLayer('building')) {
+        m.setPaintProperty('building', 'fill-opacity', 0.1);
+      }
+
+      // Roads and labels: muted, de-emphasized
+      const style = m.getStyle();
+      if (style?.layers) {
+        for (const layer of style.layers) {
+          const lid = layer.id;
+          if (lid.includes('road') || lid.includes('highway') || lid.includes('path') || lid.includes('bridge')) {
+            if (layer.type === 'line') {
+              try { m.setPaintProperty(lid, 'line-opacity', 0.3); } catch {}
+            }
+            if (layer.type === 'symbol') {
+              try { m.setPaintProperty(lid, 'text-opacity', 0.35); } catch {}
+            }
+          }
+          if (lid.includes('label') || lid.includes('place')) {
+            try { m.setPaintProperty(lid, 'text-opacity', 0.4); } catch {}
+          }
+          if (lid.includes('boundary')) {
+            if (layer.type === 'line') {
+              try { m.setPaintProperty(lid, 'line-opacity', 0.2); } catch {}
+            }
+          }
+        }
+      }
     });
 
     map.current.on('load', async () => {

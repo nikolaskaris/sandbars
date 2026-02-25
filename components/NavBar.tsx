@@ -1,5 +1,6 @@
 'use client';
 
+import { Map, Star, Settings } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 type View = 'map' | 'favorites' | 'settings';
@@ -10,10 +11,10 @@ interface NavBarProps {
   favoritesCount: number;
 }
 
-const NAV_ITEMS: { view: View; label: string; icon: string; testId: string }[] = [
-  { view: 'map', label: 'Map', icon: '\uD83C\uDF0A', testId: 'nav-map' },
-  { view: 'favorites', label: 'Favorites', icon: '\u2605', testId: 'nav-favorites' },
-  { view: 'settings', label: 'Settings', icon: '\u2699', testId: 'nav-settings' },
+const NAV_ITEMS: { view: View; label: string; icon: typeof Map; testId: string }[] = [
+  { view: 'map', label: 'Map', icon: Map, testId: 'nav-map' },
+  { view: 'favorites', label: 'Favorites', icon: Star, testId: 'nav-favorites' },
+  { view: 'settings', label: 'Settings', icon: Settings, testId: 'nav-settings' },
 ];
 
 export default function NavBar({ activeView, onViewChange, favoritesCount }: NavBarProps) {
@@ -23,61 +24,24 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
     return (
       <nav
         data-testid="nav-bar"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 56,
-          background: 'white',
-          borderTop: '1px solid #e5e7eb',
-          display: 'flex',
-          justifyContent: 'space-around',
-          alignItems: 'center',
-          zIndex: 50,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        className="fixed bottom-0 left-0 right-0 h-14 bg-surface border-t border-border flex justify-around items-center z-50"
       >
-        {NAV_ITEMS.map(({ view, label, icon, testId }) => {
+        {NAV_ITEMS.map(({ view, label, icon: Icon, testId }) => {
           const isActive = activeView === view;
           return (
             <button
               key={view}
               data-testid={testId}
               onClick={() => onViewChange(view)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '6px 16px',
-                color: isActive ? '#3b82f6' : '#6b7280',
-                position: 'relative',
-              }}
+              className={[
+                'flex flex-col items-center gap-0.5 bg-transparent border-none cursor-pointer px-4 py-1.5 relative',
+                isActive ? 'text-accent' : 'text-text-secondary',
+              ].join(' ')}
             >
-              <span style={{ fontSize: 20 }}>{icon}</span>
-              <span style={{ fontSize: 11, fontWeight: isActive ? 600 : 400 }}>{label}</span>
+              <Icon className="h-5 w-5" strokeWidth={1.5} />
+              <span className={`text-xs ${isActive ? 'font-medium' : ''}`}>{label}</span>
               {view === 'favorites' && favoritesCount > 0 && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 8,
-                    background: '#3b82f6',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: 16,
-                    height: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="absolute top-0.5 right-2 bg-accent text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-medium">
                   {favoritesCount}
                 </span>
               )}
@@ -91,65 +55,29 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
   return (
     <nav
       data-testid="nav-bar"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 48,
-        background: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        zIndex: 50,
-        fontFamily: 'system-ui, sans-serif',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      }}
+      className="fixed top-0 left-0 right-0 h-12 bg-surface border-b border-border flex items-center px-5 z-50 shadow-sm"
     >
-      <div style={{ fontWeight: 700, fontSize: 18, color: '#1a1a1a' }}>
-        Sandbars
-      </div>
+      <span className="text-lg font-medium text-text-primary">Sandbars</span>
 
-      <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-        {NAV_ITEMS.map(({ view, label, testId }) => {
+      <div className="flex gap-1 ml-auto">
+        {NAV_ITEMS.map(({ view, label, icon: Icon, testId }) => {
           const isActive = activeView === view;
           return (
             <button
               key={view}
               data-testid={testId}
               onClick={() => onViewChange(view)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: isActive ? '#eff6ff' : 'transparent',
-                border: 'none',
-                borderRadius: 6,
-                padding: '6px 14px',
-                cursor: 'pointer',
-                color: isActive ? '#3b82f6' : '#4b5563',
-                fontWeight: isActive ? 600 : 400,
-                fontSize: 14,
-                fontFamily: 'system-ui, sans-serif',
-              }}
+              className={[
+                'flex items-center gap-1.5 bg-transparent border-none rounded-md px-3.5 py-1.5 cursor-pointer text-sm transition-colors duration-150',
+                isActive
+                  ? 'text-accent font-medium border-b-2 border-accent'
+                  : 'text-text-secondary hover:text-text-primary',
+              ].join(' ')}
             >
+              <Icon className="h-4 w-4" strokeWidth={1.5} />
               {label}
               {view === 'favorites' && favoritesCount > 0 && (
-                <span
-                  style={{
-                    background: '#3b82f6',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: 18,
-                    height: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="bg-accent text-white rounded-full w-[18px] h-[18px] flex items-center justify-center text-[11px] font-medium">
                   {favoritesCount}
                 </span>
               )}
