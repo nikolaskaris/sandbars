@@ -9,6 +9,8 @@ import SpotPanel from './SpotPanel';
 import VectorOverlay from './VectorOverlay';
 import LayerToggle, { MapLayer } from './LayerToggle';
 import DeckGLOverlay from './DeckGLOverlay';
+import Toggle from './ui/Toggle';
+import { Plus, Minus } from 'lucide-react';
 import { DATA_URLS } from '@/lib/config';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
@@ -26,71 +28,24 @@ import {
 } from '@/lib/wave-utils';
 
 // =============================================================================
-// Constants & Styling (Issue #11)
+// Constants & Styling
 // =============================================================================
 
-const LEGEND_STYLES = {
-  container: {
-    position: 'absolute' as const,
-    bottom: 100,
-    left: 20,
-    zIndex: 1000,
-    background: 'white',
-    padding: '12px 16px',
-    borderRadius: 8,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    fontSize: 12,
-    fontFamily: 'system-ui, sans-serif',
-  },
-  title: {
-    fontWeight: 600,
-    marginBottom: 8,
-  },
-  gradient: {
-    width: 120,
-    height: 12,
-    borderRadius: 4,
-    background: 'linear-gradient(to right, #3b82f6, #eab308, #ef4444)',
-    marginBottom: 4,
-  },
-  labels: {
-    display: 'flex' as const,
-    justifyContent: 'space-between' as const,
-    color: '#666',
-    marginBottom: 12,
-  },
-  toggleLabel: {
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-  },
-  checkbox: {
-    width: 14,
-    height: 14,
-  },
-  buoyIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-  },
-};
-
+// TODO: Convert MapLibre popups from innerHTML strings to React portals
+// so they can use Tailwind classes directly. For now, inline styles use
+// design system color values.
 const POPUP_STYLES = {
-  container: 'font-family: system-ui, sans-serif; font-size: 13px; line-height: 1.4;',
-  title: 'font-weight: 600; margin-bottom: 4px; font-size: 14px;',
-  subtitle: 'color: #666; margin-bottom: 8px; font-size: 12px;',
-  sectionLabel: 'font-weight: 500; color: #666;',
+  container: 'font-family: Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.4; color: #2C2825;',
+  title: 'font-weight: 500; margin-bottom: 4px; font-size: 14px; color: #2C2825;',
+  subtitle: 'color: #8C8279; margin-bottom: 8px; font-size: 12px;',
+  sectionLabel: 'font-weight: 500; color: #8C8279;',
   listItem: 'margin: 4px 0;',
-  noData: 'color: #999;',
+  noData: 'color: #B5ADA4;',
 };
 
-const COLORS = {
-  textMuted: '#666',
-  error: '#ef4444',
-  errorDark: '#b91c1c',
-  buoyFill: '#ffffff',
-  buoyStroke: '#333333',
-};
+// Buoy marker colors
+const BUOY_FILL = '#FEFDFB';
+const BUOY_STROKE = '#3D3630';
 
 const WATER_COLORS: Record<MapLayer, string> = {
   waveHeight: '#C8D8E4',  // soft warm-desaturated blue
@@ -264,10 +219,10 @@ function setupBuoyLayer(
     source: 'buoys',
     paint: {
       'circle-radius': 5,
-      'circle-color': COLORS.buoyFill,
+      'circle-color': BUOY_FILL,
       'circle-opacity': 1,
       'circle-stroke-width': 1.5,
-      'circle-stroke-color': COLORS.buoyStroke,
+      'circle-stroke-color': BUOY_STROKE,
       'circle-stroke-opacity': 1,
     },
   });
@@ -809,96 +764,48 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       />
 
       {/* Search Bar + Layer Toggle */}
-      <div style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        zIndex: 10,
-      }}>
+      <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
         <SearchBar onLocationSelect={handleLocationSelect} />
         <LayerToggle activeLayer={activeLayer} onChange={setActiveLayer} />
       </div>
 
       {/* Zoom Controls */}
-      <div style={{
-        position: 'absolute',
-        top: 16,
-        right: selectedSpot && !isMobile ? 416 : 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        zIndex: 10,
-        transition: 'right 0.3s ease',
-      }}>
-        {[
-          { label: '+', action: () => map.current?.zoomIn() },
-          { label: '\u2212', action: () => map.current?.zoomOut() },
-        ].map(({ label, action }) => (
-          <button
-            key={label}
-            onClick={action}
-            style={{
-              width: 36,
-              height: 36,
-              background: 'white',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              fontSize: 20,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div
+        className="absolute top-4 flex flex-col z-10 bg-surface rounded-md shadow-sm border border-border overflow-hidden transition-[right] duration-300 ease-out"
+        style={{ right: selectedSpot && !isMobile ? 416 : 16 }}
+      >
+        <button
+          onClick={() => map.current?.zoomIn()}
+          aria-label="Zoom in"
+          className="h-9 w-9 flex items-center justify-center bg-surface text-text-secondary hover:bg-surface-secondary hover:text-text-primary active:scale-98 transition-all duration-150"
+        >
+          <Plus className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+        <div className="border-t border-border" />
+        <button
+          onClick={() => map.current?.zoomOut()}
+          aria-label="Zoom out"
+          className="h-9 w-9 flex items-center justify-center bg-surface text-text-secondary hover:bg-surface-secondary hover:text-text-primary active:scale-98 transition-all duration-150"
+        >
+          <Minus className="h-4 w-4" strokeWidth={1.5} />
+        </button>
       </div>
 
       {/* Full error overlay — initial load failed, no data at all */}
       {!currentData && waveError && (
         <div
           data-testid="error-overlay"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            zIndex: 1000,
-            padding: 20,
-            textAlign: 'center',
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-surface/95 z-[1000] p-5 text-center"
         >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>&#x1F30A;</div>
-          <h2 style={{ margin: '0 0 8px 0', color: '#333', fontSize: 20, fontWeight: 600 }}>
+          <h2 className="text-xl font-medium text-text-primary mb-2">
             Couldn&apos;t Load Forecast
           </h2>
-          <p style={{ margin: '0 0 24px 0', color: '#666', maxWidth: 300, fontSize: 14 }}>
+          <p className="text-sm text-text-secondary max-w-[300px] mb-6">
             {waveError}
           </p>
           <button
             onClick={handleRetry}
-            style={{
-              padding: '12px 24px',
-              fontSize: 16,
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              fontFamily: 'system-ui, sans-serif',
-            }}
+            className="px-6 py-3 text-base bg-accent text-white border-none rounded-md cursor-pointer hover:bg-accent-warm active:scale-98 transition-all duration-150"
           >
             Try Again
           </button>
@@ -909,38 +816,12 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {currentData && waveError && (
         <div
           data-testid="error-banner"
-          style={{
-            position: 'absolute',
-            top: 10,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#991b1b',
-            padding: '8px 16px',
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
+          className="absolute top-2.5 left-1/2 -translate-x-1/2 bg-error/10 border border-error/30 text-error px-4 py-2 rounded-md text-sm shadow-sm flex items-center gap-3 z-10"
         >
           {waveError}
           <button
             onClick={handleRetry}
-            style={{
-              background: '#991b1b',
-              color: 'white',
-              border: 'none',
-              borderRadius: 4,
-              padding: '4px 12px',
-              fontSize: 12,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              fontFamily: 'system-ui, sans-serif',
-            }}
+            className="bg-error text-white border-none rounded-sm px-3 py-1 text-xs cursor-pointer whitespace-nowrap hover:opacity-90 transition-opacity duration-150"
           >
             Retry
           </button>
@@ -948,43 +829,33 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       )}
 
       {/* Legend */}
-      <div data-testid="legend" style={LEGEND_STYLES.container}>
-        <div style={LEGEND_STYLES.title}>{LAYER_CONFIGS[activeLayer].legendTitle}</div>
-        <div style={{ ...LEGEND_STYLES.gradient, background: LAYER_CONFIGS[activeLayer].legendGradient }} />
-        <div style={LEGEND_STYLES.labels}>
+      <div data-testid="legend" className="absolute bottom-[100px] left-5 z-[1000] bg-surface p-3 px-4 rounded-md shadow-sm border border-border text-xs">
+        <div className="text-sm font-medium text-text-primary mb-2">{LAYER_CONFIGS[activeLayer].legendTitle}</div>
+        <div
+          className="w-[120px] h-3 rounded-sm mb-1"
+          style={{ background: LAYER_CONFIGS[activeLayer].legendGradient }}
+        />
+        <div className="flex justify-between text-text-secondary tabular-nums mb-3">
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[0]}</span>
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[1]}</span>
           <span>{LAYER_CONFIGS[activeLayer].legendLabels[2]}</span>
         </div>
 
         {/* Buoy Toggle */}
-        <label
-          data-testid="buoy-toggle"
-          style={{
-            ...LEGEND_STYLES.toggleLabel,
-            cursor: buoyError ? 'default' : 'pointer',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={showBuoys && !buoyError}
-            onChange={(e) => setShowBuoys(e.target.checked)}
-            disabled={!!buoyError}
-            style={{
-              ...LEGEND_STYLES.checkbox,
-              cursor: buoyError ? 'not-allowed' : 'pointer',
-            }}
-          />
-          <div style={{
-            ...LEGEND_STYLES.buoyIndicator,
-            background: buoyError ? COLORS.error : COLORS.buoyFill,
-            border: `1.5px solid ${buoyError ? COLORS.errorDark : COLORS.buoyStroke}`,
-          }} />
-          <span style={{ color: buoyError ? COLORS.errorDark : COLORS.textMuted }}>
-            {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
-          </span>
-        </label>
-
+        <div className="border-t border-border pt-2.5" data-testid="buoy-toggle">
+          <div className="flex items-center gap-2">
+            <Toggle
+              checked={showBuoys && !buoyError}
+              onChange={(checked) => setShowBuoys(checked)}
+              size="sm"
+              disabled={!!buoyError}
+            />
+            <div className={`w-2.5 h-2.5 rounded-full ${buoyError ? 'bg-error border-error' : 'bg-surface border-text-primary'} border-[1.5px]`} />
+            <span className={`text-sm ${buoyError ? 'text-error' : 'text-text-secondary'}`}>
+              {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Time Slider */}

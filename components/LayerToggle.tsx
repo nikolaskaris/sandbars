@@ -1,5 +1,7 @@
 'use client';
 
+import { Waves, Timer, Wind } from 'lucide-react';
+
 export type MapLayer = 'waveHeight' | 'wavePeriod' | 'wind';
 
 interface LayerToggleProps {
@@ -7,45 +9,34 @@ interface LayerToggleProps {
   onChange: (layer: MapLayer) => void;
 }
 
-const LAYERS: { id: MapLayer; label: string }[] = [
-  { id: 'waveHeight', label: 'Wave Height' },
-  { id: 'wavePeriod', label: 'Wave Period' },
-  { id: 'wind', label: 'Wind' },
+const LAYERS: { id: MapLayer; label: string; icon: typeof Waves }[] = [
+  { id: 'waveHeight', label: 'Height', icon: Waves },
+  { id: 'wavePeriod', label: 'Period', icon: Timer },
+  { id: 'wind', label: 'Wind', icon: Wind },
 ];
 
 export default function LayerToggle({ activeLayer, onChange }: LayerToggleProps) {
   return (
     <div
       data-testid="layer-toggle"
-      style={{
-        display: 'flex',
-        width: 'fit-content',
-        background: 'white',
-        borderRadius: 8,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        fontFamily: 'system-ui, sans-serif',
-      }}
+      className="flex w-fit bg-surface rounded-md shadow-sm border border-border"
     >
-      {LAYERS.map(({ id, label }, i) => {
+      {LAYERS.map(({ id, label, icon: Icon }) => {
         const isActive = id === activeLayer;
         return (
           <button
             key={id}
             data-testid={`layer-${id}`}
             onClick={() => onChange(id)}
-            style={{
-              padding: '6px 20px',
-              whiteSpace: 'nowrap' as const,
-              fontSize: 13,
-              fontWeight: isActive ? 600 : 400,
-              fontFamily: 'system-ui, sans-serif',
-              background: isActive ? '#3b82f6' : 'white',
-              color: isActive ? 'white' : '#4b5563',
-              border: 'none',
-              borderLeft: i > 0 ? '1px solid #e5e7eb' : 'none',
-              cursor: 'pointer',
-            }}
+            className={[
+              'flex items-center gap-1.5 px-3.5 py-1.5 text-sm whitespace-nowrap',
+              'border-b-2 transition-colors duration-150',
+              isActive
+                ? 'text-accent font-medium border-accent bg-accent-muted'
+                : 'text-text-secondary border-transparent hover:bg-surface-secondary',
+            ].join(' ')}
           >
+            <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
             {label}
           </button>
         );
