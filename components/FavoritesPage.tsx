@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Star, MapPin, Wind, Trash2 } from 'lucide-react';
 import { getFavorites, removeFavorite, Favorite } from '@/lib/favorites';
 import {
   SwellData,
@@ -12,6 +13,9 @@ import {
   findNearestFeature,
 } from '@/lib/wave-utils';
 import { DATA_URLS } from '@/lib/config';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import Skeleton from './ui/Skeleton';
 
 interface FavoritesPageProps {
   onViewSpot: (lat: number, lng: number, name: string) => void;
@@ -90,132 +94,106 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange }: Favorit
   return (
     <div
       data-testid="favorites-page"
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'system-ui, sans-serif',
-        background: '#f9fafb',
-      }}
+      className="h-full flex flex-col bg-background"
     >
       {/* Header */}
-      <div
-        style={{
-          padding: '20px 24px',
-          borderBottom: '1px solid #e5e7eb',
-          background: 'white',
-        }}
-      >
-        <div style={{ fontWeight: 700, fontSize: 20, color: '#1a1a1a' }}>Favorites</div>
-        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+      <div className="px-6 py-5 border-b border-border bg-surface">
+        <div className="flex items-center gap-2">
+          <Star className="h-5 w-5 text-text-tertiary" strokeWidth={1.5} />
+          <span className="text-xl font-medium text-text-primary">Favorites</span>
+        </div>
+        <div className="text-sm text-text-secondary mt-1">
           {favorites.length} saved {favorites.length === 1 ? 'spot' : 'spots'}
         </div>
       </div>
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
-        <div style={{ padding: '24px', color: '#6b7280', fontSize: 14, textAlign: 'center' }}>
-          Loading conditions...
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 content-start">
+          {[0, 1, 2].map((i) => (
+            <Card key={i}>
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-7 w-1/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-1/2" />
+                <div className="flex gap-2 pt-2">
+                  <Skeleton className="h-9 w-28 rounded" />
+                  <Skeleton className="h-9 w-9 rounded" />
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && favorites.length === 0 && (
-        <div style={{ padding: '60px 24px', textAlign: 'center', color: '#6b7280' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>&#9734;</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
+          <Star className="h-12 w-12 text-text-tertiary mb-4" strokeWidth={1} />
+          <div className="text-base font-medium text-text-primary mb-2">
             No favorites yet
           </div>
-          <div style={{ fontSize: 14 }}>
-            Search for a spot on the map and save it to see it here.
+          <div className="text-sm text-text-secondary text-center max-w-[280px]">
+            Search for a spot on the map and save it to see conditions here.
           </div>
         </div>
       )}
 
       {/* Favorites grid */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 16,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: 12,
-          alignContent: 'start',
-        }}
-      >
-        {favorites.map(fav => {
-          const cond = conditions.get(fav.id);
+      {!loading && favorites.length > 0 && (
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 content-start">
+          {favorites.map(fav => {
+            const cond = conditions.get(fav.id);
 
-          return (
-            <div
-              key={fav.id}
-              data-testid="favorite-item"
-              style={{
-                background: 'white',
-                borderRadius: 8,
-                padding: 16,
-                border: '1px solid #e5e7eb',
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, color: '#1a1a1a' }}>
-                {fav.name}
-              </div>
+            return (
+              <Card key={fav.id} data-testid="favorite-item">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <MapPin className="h-3.5 w-3.5 text-text-tertiary shrink-0" strokeWidth={1.5} />
+                  <span className="text-base font-medium text-text-primary">{fav.name}</span>
+                </div>
 
-              {cond ? (
-                <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
-                  <div>
-                    <span style={{ fontWeight: 600, color: '#1a1a1a', fontSize: 16 }}>
-                      {cond.waveHeight}m
-                    </span>
-                    {' '}{cond.swellSummary}
+                {cond ? (
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-medium text-text-primary tabular-nums">
+                        {cond.waveHeight}m
+                      </span>
+                      <span className="text-sm text-text-secondary">{cond.swellSummary}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-sm text-text-secondary">
+                      <Wind className="h-3.5 w-3.5 text-text-tertiary" strokeWidth={1.5} />
+                      {cond.windSummary}
+                    </div>
                   </div>
-                  <div>Wind: {cond.windSummary}</div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 13, color: '#9ca3af' }}>
-                  {loading ? 'Loading...' : 'No conditions available'}
-                </div>
-              )}
+                ) : (
+                  <div className="text-sm text-text-tertiary">
+                    No conditions available
+                  </div>
+                )}
 
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => onViewSpot(fav.lat, fav.lng, fav.name)}
-                  style={{
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 6,
-                    padding: '6px 16px',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    fontFamily: 'system-ui, sans-serif',
-                  }}
-                >
-                  View on Map
-                </button>
-                <button
-                  onClick={() => handleRemove(fav.id)}
-                  style={{
-                    background: 'none',
-                    color: '#991b1b',
-                    border: '1px solid #fecaca',
-                    borderRadius: 6,
-                    padding: '6px 16px',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    fontFamily: 'system-ui, sans-serif',
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                  <Button
+                    size="sm"
+                    onClick={() => onViewSpot(fav.lat, fav.lng, fav.name)}
+                  >
+                    View on Map
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemove(fav.id)}
+                    className="text-text-tertiary hover:text-error"
+                    aria-label={`Remove ${fav.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
