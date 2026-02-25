@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Search, MapPin, Loader2 } from 'lucide-react';
 
 interface SearchResult {
   place_id: number;
@@ -28,12 +29,9 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Close dropdown when clicking outside (handled by backdrop below)
-
   const performSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
-    // Cancel any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -73,7 +71,7 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        return; // Request was cancelled, ignore
+        return;
       }
       setError('Search unavailable');
       setResults([]);
@@ -157,23 +155,17 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
     <div
       ref={containerRef}
       data-testid="search-bar"
-      style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: 320,
-      }}
+      className="relative w-full max-w-[320px]"
     >
       {/* Search Input */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: 'white',
-          borderRadius: 8,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          overflow: 'hidden',
-        }}
-      >
+      <div className="flex items-center bg-surface rounded-md shadow-sm border border-border overflow-hidden">
+        <div className="pl-3 flex items-center pointer-events-none">
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 text-text-tertiary animate-spin" />
+          ) : (
+            <Search className="h-4 w-4 text-text-tertiary" strokeWidth={1.5} />
+          )}
+        </div>
         <input
           ref={inputRef}
           data-testid="search-input"
@@ -183,48 +175,15 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setShowDropdown(true)}
           placeholder="Search locations..."
-          style={{
-            flex: 1,
-            padding: '10px 12px',
-            border: 'none',
-            outline: 'none',
-            fontSize: 14,
-            fontFamily: 'system-ui, sans-serif',
-            color: '#333',
-          }}
+          className="flex-1 px-2.5 py-3 border-none outline-none bg-transparent text-sm text-text-primary placeholder:text-text-tertiary min-h-[44px]"
         />
         <button
           onClick={() => { setIsExplicitSearch(true); performSearch(query); }}
           disabled={isLoading || !query.trim()}
-          style={{
-            padding: '10px 14px',
-            border: 'none',
-            background: 'transparent',
-            cursor: isLoading || !query.trim() ? 'default' : 'pointer',
-            opacity: isLoading || !query.trim() ? 0.5 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="px-3 py-2.5 border-none bg-transparent cursor-pointer disabled:opacity-40 disabled:cursor-default flex items-center text-xs text-text-secondary hover:text-text-primary transition-colors duration-150"
           aria-label="Search"
         >
-          {isLoading ? (
-            <span style={{ fontSize: 12, color: '#666' }}>Searching...</span>
-          ) : (
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#666"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-          )}
+          Go
         </button>
       </div>
 
@@ -233,14 +192,7 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
         <>
           {/* Invisible backdrop to capture outside clicks */}
           <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 5,
-            }}
+            className="fixed inset-0 z-[5]"
             onClick={(e) => {
               e.stopPropagation();
               setShowDropdown(false);
@@ -249,18 +201,7 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
           <div
             data-testid="search-results"
             role="listbox"
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              marginTop: 4,
-              background: 'white',
-              borderRadius: 8,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              overflow: 'hidden',
-              zIndex: 10,
-            }}
+            className="absolute top-full left-0 right-0 mt-1 bg-surface rounded-md shadow-sm border border-border overflow-hidden z-10"
           >
           {results.map((result, index) => (
             <button
@@ -269,57 +210,31 @@ export default function SearchBar({ onLocationSelect }: SearchBarProps) {
               role="option"
               aria-selected={index === selectedIndex}
               onClick={() => handleResultClick(result)}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '10px 14px',
-                border: 'none',
-                background: index === selectedIndex ? '#f0f0f0' : 'transparent',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 13,
-                fontFamily: 'system-ui, sans-serif',
-                borderBottom: '1px solid #eee',
-              }}
-              onMouseEnter={(e) => {
-                setSelectedIndex(index);
-                e.currentTarget.style.background = '#f0f0f0';
-              }}
-              onMouseLeave={(e) => {
-                if (index !== selectedIndex) {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              onMouseEnter={() => setSelectedIndex(index)}
+              className={[
+                'flex items-start gap-2.5 w-full px-3.5 py-3 border-none text-left cursor-pointer text-sm border-b border-border last:border-b-0 transition-colors duration-100 min-h-[44px]',
+                index === selectedIndex ? 'bg-surface-secondary' : 'bg-transparent',
+              ].join(' ')}
             >
-              <div style={{ fontWeight: 500, marginBottom: 2, color: '#333' }}>
-                {formatResultName(result.display_name)}
-              </div>
-              <div style={{ fontSize: 11, color: '#666' }}>
-                {result.type}
+              <MapPin className="h-3.5 w-3.5 text-text-tertiary shrink-0 mt-0.5" strokeWidth={1.5} />
+              <div className="min-w-0">
+                <div className="font-medium text-text-primary truncate">
+                  {formatResultName(result.display_name)}
+                </div>
+                <div className="text-xs text-text-tertiary">
+                  {result.type}
+                </div>
               </div>
             </button>
           ))}
           {isLoading && results.length === 0 && (
-            <div
-              style={{
-                padding: '12px 14px',
-                color: '#666',
-                fontSize: 13,
-                fontFamily: 'system-ui, sans-serif',
-              }}
-            >
+            <div className="px-3.5 py-3 text-sm text-text-secondary flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Searching...
             </div>
           )}
           {error && !isLoading && isExplicitSearch && results.length === 0 && (
-            <div
-              style={{
-                padding: '12px 14px',
-                color: '#666',
-                fontSize: 13,
-                fontFamily: 'system-ui, sans-serif',
-              }}
-            >
+            <div className="px-3.5 py-3 text-sm text-text-tertiary">
               {error}
             </div>
           )}

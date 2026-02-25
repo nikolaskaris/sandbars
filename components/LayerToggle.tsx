@@ -29,7 +29,7 @@ export default function LayerToggle({ activeLayer, onChange }: LayerToggleProps)
             data-testid={`layer-${id}`}
             onClick={() => onChange(id)}
             className={[
-              'flex items-center gap-1.5 px-3.5 py-1.5 text-sm whitespace-nowrap',
+              'flex items-center gap-1.5 px-3.5 py-2.5 text-sm whitespace-nowrap min-h-[44px]',
               'border-b-2 transition-colors duration-150',
               isActive
                 ? 'text-accent font-medium border-accent bg-accent-muted'

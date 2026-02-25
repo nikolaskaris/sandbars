@@ -175,6 +175,7 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange }: Favorit
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <Button
                     size="sm"
+                    className="min-h-[44px]"
                     onClick={() => onViewSpot(fav.lat, fav.lng, fav.name)}
                   >
                     View on Map
@@ -182,8 +183,8 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange }: Favorit
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="min-h-[44px] text-text-tertiary hover:text-error"
                     onClick={() => handleRemove(fav.id)}
-                    className="text-text-tertiary hover:text-error"
                     aria-label={`Remove ${fav.name}`}
                   >
                     <Trash2 className="h-4 w-4" strokeWidth={1.5} />

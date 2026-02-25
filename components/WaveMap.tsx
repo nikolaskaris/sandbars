@@ -10,7 +10,8 @@ import VectorOverlay from './VectorOverlay';
 import LayerToggle, { MapLayer } from './LayerToggle';
 import DeckGLOverlay from './DeckGLOverlay';
 import Toggle from './ui/Toggle';
-import { Plus, Minus } from 'lucide-react';
+import Button from './ui/Button';
+import { Plus, Minus, AlertTriangle, AlertCircle } from 'lucide-react';
 import { DATA_URLS } from '@/lib/config';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
@@ -795,20 +796,18 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {!currentData && waveError && (
         <div
           data-testid="error-overlay"
-          className="absolute inset-0 flex flex-col items-center justify-center bg-surface/95 z-[1000] p-5 text-center"
+          className="absolute inset-0 flex flex-col items-center justify-center bg-surface/[0.97] z-[1000] p-5 text-center"
         >
+          <AlertTriangle className="h-10 w-10 text-text-tertiary mb-4" strokeWidth={1.5} />
           <h2 className="text-xl font-medium text-text-primary mb-2">
             Couldn&apos;t Load Forecast
           </h2>
           <p className="text-sm text-text-secondary max-w-[300px] mb-6">
             {waveError}
           </p>
-          <button
-            onClick={handleRetry}
-            className="px-6 py-3 text-base bg-accent text-white border-none rounded-md cursor-pointer hover:bg-accent-warm active:scale-98 transition-all duration-150"
-          >
+          <Button onClick={handleRetry}>
             Try Again
-          </button>
+          </Button>
         </div>
       )}
 
@@ -816,15 +815,13 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {currentData && waveError && (
         <div
           data-testid="error-banner"
-          className="absolute top-2.5 left-1/2 -translate-x-1/2 bg-error/10 border border-error/30 text-error px-4 py-2 rounded-md text-sm shadow-sm flex items-center gap-3 z-10"
+          className="absolute top-2.5 left-1/2 -translate-x-1/2 bg-surface border border-border px-4 py-2 rounded-md text-sm shadow-sm flex items-center gap-3 z-10"
         >
-          {waveError}
-          <button
-            onClick={handleRetry}
-            className="bg-error text-white border-none rounded-sm px-3 py-1 text-xs cursor-pointer whitespace-nowrap hover:opacity-90 transition-opacity duration-150"
-          >
+          <AlertCircle className="h-4 w-4 text-error shrink-0" strokeWidth={1.5} />
+          <span className="text-text-primary">{waveError}</span>
+          <Button variant="secondary" size="sm" onClick={handleRetry}>
             Retry
-          </button>
+          </Button>
         </div>
       )}
 

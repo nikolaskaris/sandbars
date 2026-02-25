@@ -24,7 +24,7 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
     return (
       <nav
         data-testid="nav-bar"
-        className="fixed bottom-0 left-0 right-0 h-14 bg-surface border-t border-border flex justify-around items-center z-50"
+        className="fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border flex justify-around items-center z-50 pb-safe"
       >
         {NAV_ITEMS.map(({ view, label, icon: Icon, testId }) => {
           const isActive = activeView === view;
@@ -34,7 +34,7 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
               data-testid={testId}
               onClick={() => onViewChange(view)}
               className={[
-                'flex flex-col items-center gap-0.5 bg-transparent border-none cursor-pointer px-4 py-1.5 relative',
+                'flex flex-col items-center gap-0.5 bg-transparent border-none cursor-pointer px-5 py-2 relative min-h-[44px] min-w-[44px] justify-center',
                 isActive ? 'text-accent' : 'text-text-secondary',
               ].join(' ')}
             >

@@ -370,7 +370,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
                 return (
                   <div
                     key={entry.forecastHour}
-                    className={`flex items-start gap-3 py-2 px-3 border-l-[3px] hover:bg-surface-secondary transition-colors duration-100 ${QUALITY_BORDER[quality]}`}
+                    className={`flex items-start gap-3 py-2.5 px-3 border-l-[3px] min-h-[44px] hover:bg-surface-secondary transition-colors duration-100 ${QUALITY_BORDER[quality]}`}
                   >
                     {/* Time */}
                     <div className="text-sm font-medium text-text-primary tabular-nums w-[70px] shrink-0">

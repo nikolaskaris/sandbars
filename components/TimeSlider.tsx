@@ -114,16 +114,20 @@ export default function TimeSlider({
       <div className="relative mb-1">
         {/* Tick marks with vertical lines */}
         <div className="absolute -top-5 left-0 right-0">
-          {ticks.map((tick) => (
-            <span
-              key={tick.hour}
-              className="absolute -translate-x-1/2 flex flex-col items-center"
-              style={{ left: `${(tick.hour / 384) * 100}%` }}
-            >
-              <span className="text-xs text-text-tertiary tabular-nums">{tick.label}</span>
-              <span className="w-px h-1 bg-border mt-0.5" />
-            </span>
-          ))}
+          {ticks.map((tick, i) => {
+            // On narrow screens, hide odd-indexed ticks (days 3 and 9) to prevent overlap
+            const hiddenOnMobile = i === 1 || i === 3;
+            return (
+              <span
+                key={tick.hour}
+                className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
+                style={{ left: `${(tick.hour / 384) * 100}%` }}
+              >
+                <span className="text-xs text-text-tertiary tabular-nums">{tick.label}</span>
+                <span className="w-px h-1 bg-border mt-0.5" />
+              </span>
+            );
+          })}
         </div>
 
         {/* Range input — styled via globals.css */}
