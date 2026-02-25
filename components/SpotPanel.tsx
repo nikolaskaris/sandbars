@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { MapPin, Star, X, Wind as WindIcon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   FORECAST_HOURS,
   SwellData,
   WindData,
   WaveFeatureProperties,
-  ForecastMetadata,
   GeoJSONData,
   degreesToCompass,
   parseJsonProperty,
@@ -15,6 +15,9 @@ import {
 } from '@/lib/wave-utils';
 import { DATA_URLS } from '@/lib/config';
 import { isFavorite, addFavorite, removeFavorite, findFavorite } from '@/lib/favorites';
+import Button from './ui/Button';
+import IconButton from './ui/IconButton';
+import Skeleton from './ui/Skeleton';
 
 interface SpotPanelProps {
   location: { lat: number; lng: number; name: string };
@@ -33,6 +36,7 @@ interface ForecastEntry {
 interface DayGroup {
   date: string;
   dateLabel: string;
+  isToday: boolean;
   entries: ForecastEntry[];
 }
 
@@ -58,19 +62,63 @@ function groupByDay(entries: ForecastEntry[]): DayGroup[] {
     }
   }
 
+  const todayKey = new Date().toISOString().slice(0, 10);
   const result: DayGroup[] = [];
   for (const [dateKey, dayEntries] of groups) {
     const date = new Date(dateKey + 'T12:00:00Z');
-    const dateLabel = date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-    });
-    result.push({ date: dateKey, dateLabel, entries: dayEntries });
+    const isToday = dateKey === todayKey;
+    const dateLabel = isToday
+      ? 'Today'
+      : date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        });
+    result.push({ date: dateKey, dateLabel, isToday, entries: dayEntries });
   }
 
   return result;
 }
+
+/**
+ * Temporary heuristic quality indicator. Will be replaced by the real
+ * quality scoring engine in Phase 5. Provides the visual color signal
+ * for forecast row left-border scanning.
+ */
+function heuristicQuality(entry: ForecastEntry): 'poor' | 'fair' | 'good' | 'great' | 'epic' {
+  const h = entry.waveHeight;
+  const p = entry.swells[0]?.period ?? 0;
+  const w = entry.wind?.speed ?? 0;
+
+  let score = 0;
+
+  // Height: sweet spot 1-3m
+  if (h >= 1 && h <= 3) score += 30;
+  else if (h >= 0.5 && h <= 5) score += 15;
+
+  // Period: longer is better
+  if (p >= 12) score += 30;
+  else if (p >= 8) score += 15;
+
+  // Wind: lighter is better
+  if (w <= 5) score += 30;
+  else if (w <= 10) score += 15;
+  else if (w >= 15) score -= 10;
+
+  if (score >= 75) return 'epic';
+  if (score >= 55) return 'great';
+  if (score >= 40) return 'good';
+  if (score >= 20) return 'fair';
+  return 'poor';
+}
+
+const QUALITY_BORDER: Record<string, string> = {
+  epic: 'border-l-quality-epic',
+  great: 'border-l-quality-great',
+  good: 'border-l-quality-good',
+  fair: 'border-l-quality-fair',
+  poor: 'border-l-quality-poor',
+};
 
 export default function SpotPanel({ location, onClose, onFavoritesChange }: SpotPanelProps) {
   const [forecasts, setForecasts] = useState<ForecastEntry[]>([]);
@@ -190,166 +238,99 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
   }, [location.lat, location.lng]);
 
   const days = groupByDay(forecasts);
+  const progressPct = (progress / FORECAST_HOURS.length) * 100;
 
   return (
     <div
       data-testid="spot-panel"
-      style={isMobile ? {
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: `${getSheetHeightPercent()}vh`,
-        background: 'white',
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
-        transition: 'height 0.3s ease',
-        zIndex: 1000,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        fontFamily: 'system-ui, sans-serif',
-      } : {
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        height: '100%',
-        width: 400,
-        background: 'white',
-        boxShadow: '-2px 0 12px rgba(0,0,0,0.15)',
-        zIndex: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'system-ui, sans-serif',
-      }}
+      className={
+        isMobile
+          ? 'fixed bottom-0 left-0 right-0 bg-surface rounded-t-lg shadow-lg z-[1000] flex flex-col overflow-hidden transition-[height] duration-300 ease-out'
+          : 'absolute top-0 right-0 h-full w-[420px] bg-surface shadow-lg z-20 flex flex-col'
+      }
+      style={isMobile ? { height: `${getSheetHeightPercent()}vh` } : undefined}
     >
       {/* Mobile drag handle */}
       {isMobile && (
         <div
           onClick={handleDragHandleTap}
-          style={{
-            padding: 12,
-            cursor: 'pointer',
-            display: 'flex',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
+          className="py-3 cursor-pointer flex justify-center shrink-0"
         >
-          <div style={{
-            width: 40,
-            height: 4,
-            backgroundColor: '#ccc',
-            borderRadius: 2,
-          }} />
+          <div className="w-10 h-1 bg-border rounded-full" />
         </div>
       )}
 
       {/* Header */}
       <div
-        style={{
-          position: isMobile ? 'relative' : 'sticky',
-          top: isMobile ? undefined : 0,
-          background: 'white',
-          borderBottom: '1px solid #e5e7eb',
-          padding: isMobile ? '0 16px 12px' : '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: 1,
-          flexShrink: 0,
-        }}
+        className={[
+          'bg-surface border-b border-border flex justify-between items-center shrink-0 z-[1]',
+          isMobile ? 'relative px-4 pb-3' : 'sticky top-0 px-5 py-4',
+        ].join(' ')}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 16 }}>{location.name}</div>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-            16-Day Forecast
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-4 w-4 text-text-tertiary shrink-0" strokeWidth={1.5} />
+            <span className="text-lg font-medium text-text-primary truncate">{location.name}</span>
           </div>
+          <div className="text-sm text-text-secondary mt-0.5">16-Day Forecast</div>
         </div>
-        <button
+        <Button
           data-testid="save-favorite-button"
+          variant={saved ? 'primary' : 'secondary'}
+          size="sm"
           onClick={handleToggleFavorite}
-          style={{
-            background: saved ? '#fef3c7' : '#f3f4f6',
-            border: saved ? '1px solid #f59e0b' : '1px solid #d1d5db',
-            borderRadius: 6,
-            padding: '4px 10px',
-            fontSize: 12,
-            cursor: 'pointer',
-            color: saved ? '#92400e' : '#374151',
-            fontFamily: 'system-ui, sans-serif',
-            whiteSpace: 'nowrap',
-            marginRight: 8,
-          }}
+          className="mr-2 shrink-0"
         >
-          {saved ? 'Remove from Favorites' : 'Save to Favorites'}
-        </button>
-        <button
+          <Star
+            className={`h-3.5 w-3.5 ${saved ? 'fill-current' : ''}`}
+            strokeWidth={1.5}
+          />
+          {saved ? 'Saved' : 'Save'}
+        </Button>
+        <IconButton
           data-testid="spot-panel-close"
           onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            fontSize: 22,
-            cursor: 'pointer',
-            color: '#666',
-            padding: '4px 8px',
-            borderRadius: 4,
-            lineHeight: 1,
-          }}
           aria-label="Close panel"
         >
-          ✕
-        </button>
+          <X className="h-4 w-4" strokeWidth={1.5} />
+        </IconButton>
       </div>
 
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            padding: '8px 20px',
-            background: '#f0fdf4',
-            borderBottom: '1px solid #bbf7d0',
-            color: '#166534',
-            fontSize: 13,
-            fontWeight: 500,
-            textAlign: 'center',
-          }}
-        >
+        <div className="px-5 py-2 bg-success/15 border-b border-success/30 text-success text-sm font-medium text-center">
           {toast}
         </div>
       )}
 
       {/* Loading progress */}
       {loading && (
-        <div style={{ padding: '16px 20px', color: '#666', fontSize: 13 }}>
-          <div style={{ marginBottom: 8 }}>
-            Loading forecast data... ({progress}/{FORECAST_HOURS.length})
-          </div>
-          <div
-            style={{
-              height: 4,
-              background: '#e5e7eb',
-              borderRadius: 2,
-              overflow: 'hidden',
-            }}
-          >
+        <div className="px-5 py-4 shrink-0">
+          <div className="h-1 bg-border rounded-sm overflow-hidden mb-2">
             <div
-              style={{
-                height: '100%',
-                width: `${(progress / FORECAST_HOURS.length) * 100}%`,
-                background: '#3b82f6',
-                borderRadius: 2,
-                transition: 'width 0.2s',
-              }}
+              className="h-full bg-accent rounded-sm transition-[width] duration-200"
+              style={{ width: `${progressPct}%` }}
             />
+          </div>
+          <div className="text-xs text-text-tertiary tabular-nums mb-4">
+            Loading {progress} of {FORECAST_HOURS.length} forecast hours
+          </div>
+          <div className="space-y-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-5 w-12" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-14 ml-auto" />
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Error state */}
       {error && !loading && (
-        <div style={{ padding: '16px 20px', color: '#991b1b', fontSize: 13 }}>
+        <div className="px-5 py-4 text-error text-sm">
           {error}
         </div>
       )}
@@ -357,30 +338,22 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
       {/* Forecast list */}
       <div
         data-testid="forecast-list"
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '0 20px 20px',
-        }}
+        className="flex-1 overflow-y-auto px-5 pb-5"
       >
         {days.map((day) => (
-          <div key={day.date} data-testid="forecast-day" style={{ marginTop: 16 }}>
+          <div key={day.date} data-testid="forecast-day" className="mt-4">
             {/* Day header */}
             <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#1a1a1a',
-                paddingBottom: 8,
-                borderBottom: '1px solid #e5e7eb',
-                marginBottom: 8,
-              }}
+              className={[
+                'text-sm font-medium pb-2 border-b border-border mb-1',
+                day.isToday ? 'text-accent' : 'text-text-primary',
+              ].join(' ')}
             >
               {day.dateLabel}
             </div>
 
             {/* Entries for this day */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="flex flex-col">
               {day.entries.map((entry) => {
                 const primarySwell = entry.swells[0];
                 const parsedTime = parseValidTime(entry.validTime);
@@ -392,52 +365,50 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
                     })
                   : `+${entry.forecastHour}h`;
 
+                const quality = heuristicQuality(entry);
+
                 return (
                   <div
                     key={entry.forecastHour}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 12,
-                      padding: 8,
-                      background: 'rgba(0, 0, 0, 0.02)',
-                      borderRadius: 4,
-                      fontSize: 13,
-                      lineHeight: 1.5,
-                    }}
+                    className={`flex items-start gap-3 py-2 px-3 border-l-[3px] hover:bg-surface-secondary transition-colors duration-100 ${QUALITY_BORDER[quality]}`}
                   >
-                    <div style={{ fontWeight: 600, minWidth: 70, color: '#333' }}>
+                    {/* Time */}
+                    <div className="text-sm font-medium text-text-primary tabular-nums w-[70px] shrink-0">
                       {timeStr}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {/* Wave height */}
-                      <div style={{ color: '#1a1a1a' }}>
-                        <span style={{ fontWeight: 600 }}>{entry.waveHeight}m</span>
+
+                    {/* Wave + swell details */}
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-base font-medium text-text-primary tabular-nums">
+                          {entry.waveHeight}m
+                        </span>
                         {primarySwell && (
-                          <span style={{ color: '#666' }}>
-                            {' '}@ {primarySwell.period}s from {degreesToCompass(primarySwell.direction)}
+                          <span className="text-sm text-text-secondary tabular-nums">
+                            @ {primarySwell.period}s {degreesToCompass(primarySwell.direction)}
                           </span>
                         )}
                       </div>
 
-                      {/* Wind */}
-                      {entry.wind && entry.wind.speed != null && (
-                        <div style={{ color: '#666', fontSize: 12 }}>
-                          Wind: {entry.wind.speed} m/s from {degreesToCompass(entry.wind.direction)}
-                        </div>
-                      )}
-
-                      {/* Additional swells */}
+                      {/* Secondary swells */}
                       {entry.swells.length > 1 && (
-                        <div style={{ color: '#888', fontSize: 11 }}>
+                        <div className="text-xs text-text-tertiary tabular-nums">
                           {entry.swells.slice(1).map((s, i) => (
                             <div key={i}>
-                              + {s.height}m @ {s.period}s from {degreesToCompass(s.direction)}
+                              + {s.height}m @ {s.period}s {degreesToCompass(s.direction)}
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
+
+                    {/* Wind */}
+                    {entry.wind && entry.wind.speed != null && (
+                      <div className="flex items-center gap-1 text-sm text-text-secondary tabular-nums ml-auto shrink-0">
+                        <WindIcon className="h-3 w-3 text-text-tertiary" strokeWidth={1.5} />
+                        {entry.wind.speed} m/s
+                      </div>
+                    )}
                   </div>
                 );
               })}
