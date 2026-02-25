@@ -5,12 +5,35 @@ node_modules
 .env.local
 .env*.local
 
+# OS files
+.DS_Store
+
 # GRIB data files (large, downloaded on demand)
 data/grib/
+*.grib2
+*.grib2.*.idx
+
+# GeoJSON land/lake masks (large, downloaded on demand)
+scripts/ne_*.geojson
 
 # GeoJSON data files (served from Supabase Storage)
 public/data/*.geojson
 
+# Images (screenshots, reference images)
+*.png
+*.jpeg
+
 # Playwright
 playwright-report/
+playwright-report */
 test-results/
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Duplicate/extra lock files
+package-lock 2.json
+bun.lock
+
+# Python virtual environments
+sandbars-ingestion/venv/
