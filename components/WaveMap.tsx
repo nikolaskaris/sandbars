@@ -93,9 +93,9 @@ const COLORS = {
 };
 
 const WATER_COLORS: Record<MapLayer, string> = {
-  waveHeight: '#1E3CB4',  // matches 0m wave height
-  wavePeriod: '#283CB4',  // matches 0s wave period
-  wind: '#1E3CB4',
+  waveHeight: '#B4AFA8',  // warm muted gray baseline
+  wavePeriod: '#B4AFA8',  // warm muted gray baseline
+  wind: '#B4AFA8',        // warm muted gray baseline
 };
 
 function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
@@ -115,18 +115,18 @@ const LAYER_CONFIGS: Record<MapLayer, {
 }> = {
   waveHeight: {
     legendTitle: 'Wave Height',
-    legendGradient: 'linear-gradient(to right, #3b82f6, #eab308, #ef4444)',
-    legendLabels: ['0m', '3m', '6m+'],
+    legendGradient: 'linear-gradient(to right, #B4AFA8, #7896C3, #4655A5, #193782)',
+    legendLabels: ['0m', '5m', '15m+'],
   },
   wavePeriod: {
     legendTitle: 'Wave Period',
-    legendGradient: 'linear-gradient(to right, #87CEEB, #22c55e, #7c3aed)',
-    legendLabels: ['5s', '12s', '20s+'],
+    legendGradient: 'linear-gradient(to right, #B4AFA8, #968CC3, #5F41A5, #41288C)',
+    legendLabels: ['0s', '12s', '25s+'],
   },
   wind: {
     legendTitle: 'Wind Speed',
-    legendGradient: 'linear-gradient(to right, #d1d5db, #22c55e, #ef4444)',
-    legendLabels: ['0 m/s', '10', '20+'],
+    legendGradient: 'linear-gradient(to right, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
+    legendLabels: ['0 m/s', '15', '30+'],
   },
 };
 

@@ -41,40 +41,38 @@ LUT_SIZE = 1024
 MAX_LATITUDE = 85.051129  # degrees — Mercator undefined at poles
 
 # Color ramps: list of (normalized_position, R, G, B, A)
-# Wave height: 0-15m, blue → cyan → green → yellow → red
+# Wave height: 0-15m, warm gray → light blue → deep navy
 WAVE_HEIGHT_COLORS = [
-    (0.0,   30,  60, 180, 160),   # deep blue
-    (0.07,  0,  120, 200, 180),   # blue
-    (0.13,  0,  180, 220, 190),   # cyan
-    (0.27,  0,  200, 100, 200),   # green
-    (0.47, 200, 220,  50, 210),   # yellow
-    (0.67, 240, 140,  30, 220),   # orange
-    (1.0,  220,  30,  30, 230),   # red
+    (0.0,  180, 175, 168, 140),   # warm muted gray (flat water)
+    (0.1,  155, 165, 180, 160),   # bluish gray
+    (0.25, 120, 150, 195, 180),   # light desaturated blue
+    (0.5,   70, 120, 185, 200),   # medium blue
+    (0.75,  40,  85, 165, 220),   # strong blue
+    (1.0,   25,  55, 130, 235),   # deep navy blue
 ]
 WAVE_HEIGHT_MIN = 0.0
 WAVE_HEIGHT_MAX = 15.0
 
-# Wave period: 0-25s, blue → teal → green → purple
+# Wave period: 0-25s, warm gray → lavender → deep indigo-purple
 WAVE_PERIOD_COLORS = [
-    (0.0,   40,  60, 180, 160),   # blue
-    (0.2,   0,  140, 200, 180),   # teal
-    (0.4,   0,  180, 120, 200),   # green-teal
-    (0.6,  80,  200,  80, 210),   # green
-    (0.8,  180, 100, 200, 220),   # purple
-    (1.0,  140,  40, 180, 230),   # deep purple
+    (0.0,  180, 175, 168, 140),   # warm muted gray (short period)
+    (0.1,  165, 160, 180, 160),   # purple-ish gray
+    (0.25, 150, 140, 195, 180),   # light lavender
+    (0.5,  120, 100, 180, 200),   # medium purple
+    (0.75,  95,  65, 165, 220),   # stronger purple
+    (1.0,   65,  40, 140, 235),   # deep indigo-purple
 ]
 WAVE_PERIOD_MIN = 0.0
 WAVE_PERIOD_MAX = 25.0
 
-# Wind speed: 0-30 m/s, gray → green → yellow → red
+# Wind speed: 0-30 m/s, warm gray → teal → deep teal
 WIND_SPEED_COLORS = [
-    (0.0,  100, 120, 140, 140),   # gray
-    (0.17,  60, 160, 120, 170),   # teal
-    (0.33,  40, 190,  80, 190),   # green
-    (0.5,  160, 210,  50, 200),   # yellow-green
-    (0.67, 220, 180,  30, 210),   # yellow-orange
-    (0.83, 240, 100,  30, 220),   # orange
-    (1.0,  200,  30,  30, 230),   # red
+    (0.0,  180, 175, 168, 140),   # warm muted gray (calm)
+    (0.1,  160, 175, 172, 160),   # teal-ish gray
+    (0.25, 120, 175, 170, 180),   # light teal
+    (0.5,   60, 155, 150, 200),   # medium teal
+    (0.75,  30, 130, 125, 220),   # stronger teal
+    (1.0,   15, 100, 100, 235),   # deep teal
 ]
 WIND_SPEED_MIN = 0.0
 WIND_SPEED_MAX = 30.0
