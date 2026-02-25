@@ -540,21 +540,26 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       }
       updateWaterColor(m, activeLayer);
 
+      // Helper: set color on fill or background layers safely
+      const setLayerColor = (layerId: string, color: string) => {
+        const layer = m.getLayer(layerId);
+        if (!layer) return;
+        if (layer.type === 'background') {
+          m.setPaintProperty(layerId, 'background-color', color);
+        } else if (layer.type === 'fill') {
+          m.setPaintProperty(layerId, 'fill-color', color);
+        }
+      };
+
       // Land/background: warm sand tones
       for (const id of ['background', 'land', 'landcover']) {
-        if (m.getLayer(id)) {
-          m.setPaintProperty(id, 'fill-color', '#F0EBE3');
-        }
-      }
-      // Catch background layers that use background-color instead of fill-color
-      if (m.getLayer('background')) {
-        try { m.setPaintProperty('background', 'background-color', '#F0EBE3'); } catch {}
+        setLayerColor(id, '#F0EBE3');
       }
 
       // Parks/vegetation: very subtle warm sage
       for (const id of ['park', 'landuse', 'landcover']) {
-        if (m.getLayer(id)) {
-          m.setPaintProperty(id, 'fill-color', '#E4DECF');
+        setLayerColor(id, '#E4DECF');
+        if (m.getLayer(id)?.type === 'fill') {
           m.setPaintProperty(id, 'fill-opacity', 0.5);
         }
       }
