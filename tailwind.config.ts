@@ -119,12 +119,13 @@ export default {
           high: "#1B6B62",
         },
 
-        // Quality score — poor → fair → good → epic
+        // Quality score — poor → fair → good → great → epic
         quality: {
           poor: "#C47A6C",
           fair: "#C9A96E",
           good: "#7BA882",
-          epic: "#3A7F7A",
+          great: "#3A7F7A",
+          epic: "#7C6B9E",
         },
 
         // Status — semantic, muted per brief

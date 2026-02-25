@@ -187,7 +187,8 @@ export default function DesignReference() {
                     <Swatch name="poor" bg="bg-quality-poor" hex="#C47A6C" />
                     <Swatch name="fair" bg="bg-quality-fair" hex="#C9A96E" />
                     <Swatch name="good" bg="bg-quality-good" hex="#7BA882" />
-                    <Swatch name="epic" bg="bg-quality-epic" hex="#3A7F7A" />
+                    <Swatch name="great" bg="bg-quality-great" hex="#3A7F7A" />
+                    <Swatch name="epic" bg="bg-quality-epic" hex="#7C6B9E" />
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -435,22 +436,24 @@ export default function DesignReference() {
         <Section title="Badges">
           <div className="space-y-4">
             <div>
-              <Label>Quality Score</Label>
+              <Label>Quality Score (5-tier, label only)</Label>
               <div className="mt-2 flex flex-wrap gap-3">
-                <Badge variant="quality" score={15} />
-                <Badge variant="quality" score={35} />
-                <Badge variant="quality" score={55} />
-                <Badge variant="quality" score={75} />
-                <Badge variant="quality" score={95} />
+                <Badge variant="quality" score={10} />
+                <Badge variant="quality" score={30} />
+                <Badge variant="quality" score={50} />
+                <Badge variant="quality" score={70} />
+                <Badge variant="quality" score={90} />
               </div>
             </div>
 
             <div>
               <Label>Quality Score (md size)</Label>
               <div className="mt-2 flex flex-wrap gap-3">
-                <Badge variant="quality" score={15} size="md" />
-                <Badge variant="quality" score={55} size="md" />
-                <Badge variant="quality" score={95} size="md" />
+                <Badge variant="quality" score={10} size="md" />
+                <Badge variant="quality" score={30} size="md" />
+                <Badge variant="quality" score={50} size="md" />
+                <Badge variant="quality" score={70} size="md" />
+                <Badge variant="quality" score={90} size="md" />
               </div>
             </div>
 
@@ -623,25 +626,34 @@ export default function DesignReference() {
                 </div>
               </div>
 
-              {/* Time entries */}
+              {/* Time entries with quality color indicators */}
               <div className="space-y-1 pt-1">
                 {[
-                  { time: '6:00 AM', height: '3.2', period: '15', dir: 'NW', wind: '4' },
-                  { time: '9:00 AM', height: '3.8', period: '16', dir: 'NW', wind: '5' },
-                  { time: '12:00 PM', height: '3.5', period: '15', dir: 'NNW', wind: '8' },
-                  { time: '3:00 PM', height: '3.0', period: '14', dir: 'NNW', wind: '10' },
-                ].map((entry) => (
-                  <div key={entry.time} className="flex items-center gap-3 py-1.5 text-sm">
-                    <span className="w-16 text-text-secondary tabular-nums shrink-0">{entry.time}</span>
-                    <span className="font-medium text-text-primary tabular-nums w-10">{entry.height}m</span>
-                    <span className="text-text-tertiary tabular-nums">@ {entry.period}s</span>
-                    <ArrowUp
-                      className="h-3 w-3 text-text-tertiary shrink-0"
-                    />
-                    <span className="text-text-tertiary">{entry.dir}</span>
-                    <span className="text-text-tertiary ml-auto tabular-nums">{entry.wind} m/s</span>
-                  </div>
-                ))}
+                  { time: '6:00 AM', height: '3.2', period: '15', dir: 'NW', wind: '4', quality: 'great' as const },
+                  { time: '9:00 AM', height: '3.8', period: '16', dir: 'NW', wind: '5', quality: 'epic' as const },
+                  { time: '12:00 PM', height: '3.5', period: '15', dir: 'NNW', wind: '8', quality: 'good' as const },
+                  { time: '3:00 PM', height: '3.0', period: '14', dir: 'NNW', wind: '10', quality: 'fair' as const },
+                ].map((entry) => {
+                  const qualityColors = {
+                    epic: 'border-quality-epic',
+                    great: 'border-quality-great',
+                    good: 'border-quality-good',
+                    fair: 'border-quality-fair',
+                    poor: 'border-quality-poor',
+                  };
+                  return (
+                    <div key={entry.time} className={`flex items-center gap-3 py-1.5 text-sm border-l-[3px] pl-2.5 ${qualityColors[entry.quality]}`}>
+                      <span className="w-16 text-text-secondary tabular-nums shrink-0">{entry.time}</span>
+                      <span className="font-medium text-text-primary tabular-nums w-10">{entry.height}m</span>
+                      <span className="text-text-tertiary tabular-nums">@ {entry.period}s</span>
+                      <ArrowUp
+                        className="h-3 w-3 text-text-tertiary shrink-0"
+                      />
+                      <span className="text-text-tertiary">{entry.dir}</span>
+                      <span className="text-text-tertiary ml-auto tabular-nums">{entry.wind} m/s</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </Card>

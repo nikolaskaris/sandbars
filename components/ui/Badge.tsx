@@ -26,9 +26,10 @@ interface NeutralBadgeProps extends BadgeBaseProps {
 type BadgeProps = QualityBadgeProps | StatusBadgeProps | NeutralBadgeProps;
 
 function getQualityLevel(score: number): { label: string; classes: string } {
-  if (score >= 76) return { label: 'Epic', classes: 'bg-quality-epic text-white' };
-  if (score >= 51) return { label: 'Good', classes: 'bg-quality-good text-white' };
-  if (score >= 26) return { label: 'Fair', classes: 'bg-quality-fair text-text-primary' };
+  if (score >= 81) return { label: 'Epic', classes: 'bg-quality-epic text-white' };
+  if (score >= 61) return { label: 'Great', classes: 'bg-quality-great text-white' };
+  if (score >= 41) return { label: 'Good', classes: 'bg-quality-good text-white' };
+  if (score >= 21) return { label: 'Fair', classes: 'bg-quality-fair text-text-primary' };
   return { label: 'Poor', classes: 'bg-quality-poor text-white' };
 }
 
@@ -51,12 +52,7 @@ export default function Badge(props: BadgeProps) {
 
   if (props.variant === 'quality') {
     const { label, classes } = getQualityLevel(props.score);
-    content = (
-      <>
-        <span className="tabular-nums">{props.score}</span>
-        <span className="ml-1">{label}</span>
-      </>
-    );
+    content = label;
     variantClasses = classes;
   } else if (props.variant === 'status') {
     content = props.children;
