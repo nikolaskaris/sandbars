@@ -7,11 +7,12 @@ import TimeSlider from './TimeSlider';
 import SearchBar from './SearchBar';
 import SpotPanel from './SpotPanel';
 import VectorOverlay from './VectorOverlay';
-import LayerToggle, { MapLayer } from './LayerToggle';
+import { MapLayer } from './LayerToggle';
 import DeckGLOverlay from './DeckGLOverlay';
 import Toggle from './ui/Toggle';
 import Button from './ui/Button';
-import { Plus, Minus, AlertTriangle, AlertCircle } from 'lucide-react';
+import IconButton from './ui/IconButton';
+import { Plus, Minus, AlertTriangle, AlertCircle, Layers, Waves, Timer, Wind } from 'lucide-react';
 import { DATA_URLS } from '@/lib/config';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
@@ -67,22 +68,48 @@ function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
 const LAYER_CONFIGS: Record<MapLayer, {
   legendTitle: string;
   legendGradient: string;
-  legendLabels: [string, string, string];
+  legendLabels: { value: string; position: number }[];
 }> = {
   waveHeight: {
     legendTitle: 'Wave Height',
-    legendGradient: 'linear-gradient(to right, #B4AFA8, #7896C3, #4655A5, #193782)',
-    legendLabels: ['0m', '5m', '15m+'],
+    legendGradient: 'linear-gradient(to top, #B4AFA8, #7896C3, #4655A5, #193782)',
+    legendLabels: [
+      { value: '0m', position: 0 },
+      { value: '1m', position: 6.7 },
+      { value: '2m', position: 13.3 },
+      { value: '3m', position: 20 },
+      { value: '5m', position: 33.3 },
+      { value: '8m', position: 53.3 },
+      { value: '10m', position: 66.7 },
+      { value: '15m+', position: 100 },
+    ],
   },
   wavePeriod: {
     legendTitle: 'Wave Period',
-    legendGradient: 'linear-gradient(to right, #B4AFA8, #968CC3, #5F41A5, #41288C)',
-    legendLabels: ['0s', '12s', '25s+'],
+    legendGradient: 'linear-gradient(to top, #B4AFA8, #968CC3, #5F41A5, #41288C)',
+    legendLabels: [
+      { value: '0s', position: 0 },
+      { value: '5s', position: 20 },
+      { value: '8s', position: 32 },
+      { value: '10s', position: 40 },
+      { value: '12s', position: 48 },
+      { value: '15s', position: 60 },
+      { value: '20s+', position: 80 },
+    ],
   },
   wind: {
     legendTitle: 'Wind Speed',
-    legendGradient: 'linear-gradient(to right, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
-    legendLabels: ['0 m/s', '15', '30+'],
+    legendGradient: 'linear-gradient(to top, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
+    legendLabels: [
+      { value: '0', position: 0 },
+      { value: '3', position: 10 },
+      { value: '5', position: 16.7 },
+      { value: '8', position: 26.7 },
+      { value: '10', position: 33.3 },
+      { value: '15', position: 50 },
+      { value: '20', position: 66.7 },
+      { value: '30+', position: 100 },
+    ],
   },
 };
 
@@ -305,6 +332,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
 
   // Layer visibility
   const [showBuoys, setShowBuoys] = useState(true);
+  const [showLayerModal, setShowLayerModal] = useState(false);
 
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
@@ -770,10 +798,72 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         opacity={0.8}
       />
 
-      {/* Search Bar + Layer Toggle */}
+      {/* Search Bar + Layers Button */}
       <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
         <SearchBar onLocationSelect={handleLocationSelect} />
-        <LayerToggle activeLayer={activeLayer} onChange={setActiveLayer} />
+        <div className="relative">
+          <IconButton
+            data-testid="layers-button"
+            aria-label="Layers"
+            active={showLayerModal}
+            onClick={() => setShowLayerModal(prev => !prev)}
+          >
+            <Layers className="h-4 w-4" strokeWidth={1.5} />
+          </IconButton>
+
+          {/* Layer Modal */}
+          {showLayerModal && (
+            <>
+              <div className="fixed inset-0 z-[5]" onClick={() => setShowLayerModal(false)} />
+              <div
+                data-testid="layer-modal"
+                className="absolute top-0 left-[calc(100%+8px)] bg-surface rounded-md shadow border border-border p-3 z-10 w-[200px]"
+              >
+                {/* Data Layer section */}
+                <div className="text-xs font-medium text-text-tertiary mb-2">Data Layer</div>
+                <div className="flex flex-col gap-0.5 mb-3">
+                  {([
+                    { id: 'waveHeight' as MapLayer, label: 'Wave Height', icon: Waves },
+                    { id: 'wavePeriod' as MapLayer, label: 'Wave Period', icon: Timer },
+                    { id: 'wind' as MapLayer, label: 'Wind Speed', icon: Wind },
+                  ]).map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      data-testid={`layer-${id}`}
+                      onClick={() => setActiveLayer(id)}
+                      className={[
+                        'flex items-center gap-2 px-2.5 py-2 rounded text-sm w-full text-left transition-colors duration-100 min-h-[36px]',
+                        activeLayer === id
+                          ? 'bg-accent-muted text-accent font-medium'
+                          : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary',
+                      ].join(' ')}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Overlays section */}
+                <div className="border-t border-border pt-2.5">
+                  <div className="text-xs font-medium text-text-tertiary mb-2">Overlays</div>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5" data-testid="buoy-toggle">
+                    <Toggle
+                      checked={showBuoys && !buoyError}
+                      onChange={(checked) => setShowBuoys(checked)}
+                      size="sm"
+                      disabled={!!buoyError}
+                    />
+                    <div className={`w-2.5 h-2.5 rounded-full ${buoyError ? 'bg-error border-error' : 'bg-surface border-text-primary'} border-[1.5px]`} />
+                    <span className={`text-sm ${buoyError ? 'text-error' : 'text-text-secondary'}`}>
+                      {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Zoom Controls */}
@@ -831,32 +921,32 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         </div>
       )}
 
-      {/* Legend */}
-      <div data-testid="legend" className="absolute bottom-[100px] left-5 z-[1000] bg-surface p-3 px-4 rounded-md shadow-sm border border-border text-xs">
-        <div className="text-sm font-medium text-text-primary mb-2">{LAYER_CONFIGS[activeLayer].legendTitle}</div>
-        <div
-          className="w-[120px] h-3 rounded-sm mb-1"
-          style={{ background: LAYER_CONFIGS[activeLayer].legendGradient }}
-        />
-        <div className="flex justify-between text-text-secondary tabular-nums mb-3">
-          <span>{LAYER_CONFIGS[activeLayer].legendLabels[0]}</span>
-          <span>{LAYER_CONFIGS[activeLayer].legendLabels[1]}</span>
-          <span>{LAYER_CONFIGS[activeLayer].legendLabels[2]}</span>
+      {/* Vertical Legend */}
+      <div
+        data-testid="legend"
+        className="absolute left-3 z-10 bg-surface/80 rounded-md shadow-sm border border-border px-2 py-2.5"
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
+      >
+        <div className="text-xs font-medium text-text-primary mb-2 text-center whitespace-nowrap">
+          {LAYER_CONFIGS[activeLayer].legendTitle}
         </div>
-
-        {/* Buoy Toggle */}
-        <div className="border-t border-border pt-2.5" data-testid="buoy-toggle">
-          <div className="flex items-center gap-2">
-            <Toggle
-              checked={showBuoys && !buoyError}
-              onChange={(checked) => setShowBuoys(checked)}
-              size="sm"
-              disabled={!!buoyError}
-            />
-            <div className={`w-2.5 h-2.5 rounded-full ${buoyError ? 'bg-error border-error' : 'bg-surface border-text-primary'} border-[1.5px]`} />
-            <span className={`text-sm ${buoyError ? 'text-error' : 'text-text-secondary'}`}>
-              {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
-            </span>
+        <div className="flex gap-1.5">
+          {/* Gradient bar */}
+          <div
+            className="w-2 rounded-sm shrink-0"
+            style={{ height: 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
+          />
+          {/* Labels */}
+          <div className="relative" style={{ height: 180 }}>
+            {LAYER_CONFIGS[activeLayer].legendLabels.map((tick) => (
+              <span
+                key={tick.value}
+                className="absolute text-xs text-text-secondary tabular-nums leading-none whitespace-nowrap"
+                style={{ bottom: `${tick.position}%`, transform: 'translateY(50%)' }}
+              >
+                {tick.value}
+              </span>
+            ))}
           </div>
         </div>
       </div>

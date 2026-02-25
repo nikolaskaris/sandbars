@@ -98,7 +98,7 @@ export default function TimeSlider({
       className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border shadow-sm px-5 pt-3 pb-4 z-10"
     >
       {/* Current time display */}
-      <div className="flex justify-center items-baseline gap-2 mb-2">
+      <div className="flex justify-center items-baseline gap-2 mb-4">
         <span
           data-testid="forecast-time-label"
           className={`text-lg font-medium text-text-primary tabular-nums transition-opacity duration-150 ${isLoading ? 'opacity-50' : 'opacity-100'}`}
@@ -110,37 +110,34 @@ export default function TimeSlider({
         </span>
       </div>
 
-      {/* Slider container */}
-      <div className="relative mb-1">
-        {/* Tick marks with vertical lines */}
-        <div className="absolute -top-5 left-0 right-0">
-          {ticks.map((tick, i) => {
-            // On narrow screens, hide odd-indexed ticks (days 3 and 9) to prevent overlap
-            const hiddenOnMobile = i === 1 || i === 3;
-            return (
-              <span
-                key={tick.hour}
-                className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
-                style={{ left: `${(tick.hour / 384) * 100}%` }}
-              >
-                <span className="text-xs text-text-tertiary tabular-nums">{tick.label}</span>
-                <span className="w-px h-1 bg-border mt-0.5" />
-              </span>
-            );
-          })}
-        </div>
-
-        {/* Range input — styled via globals.css */}
-        <input
-          type="range"
-          min={0}
-          max={FORECAST_HOURS.length - 1}
-          step={1}
-          value={currentIndex}
-          onChange={handleChange}
-          className="w-full"
-        />
+      {/* Tick labels row — fixed height, separate from slider */}
+      <div className="relative h-4 mb-1">
+        {ticks.map((tick, i) => {
+          // Mobile: show only days 0, 6, 12, 16 (skip indices 1 and 3 which are days 3 and 9)
+          const hiddenOnMobile = i === 1 || i === 3;
+          return (
+            <span
+              key={tick.hour}
+              className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
+              style={{ left: `${(tick.hour / 384) * 100}%` }}
+            >
+              <span className="text-xs text-text-tertiary tabular-nums leading-none">{tick.label}</span>
+              <span className="w-px h-1 bg-border mt-0.5" />
+            </span>
+          );
+        })}
       </div>
+
+      {/* Range input — styled via globals.css */}
+      <input
+        type="range"
+        min={0}
+        max={FORECAST_HOURS.length - 1}
+        step={1}
+        value={currentIndex}
+        onChange={handleChange}
+        className="w-full"
+      />
 
       {/* End labels */}
       <div className="flex justify-between text-xs text-text-tertiary mt-1">
