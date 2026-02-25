@@ -88,100 +88,45 @@ export default function TimeSlider({
 
   // Calculate display values
   const daysDiff = validTime && referenceTime ? getDaysDiff(validTime, referenceTime) : 0;
-  const dateDisplay = validTime ? formatDateTime(validTime) : 'Loading...';
-  const daysLabel = `+${daysDiff} days`;
+  const dateDisplay = validTime ? formatDateTime(validTime) : '\u2014';
+  const daysLabel = `+${daysDiff}d`;
   const ticks = getTickDates(referenceTime);
 
   return (
     <div
       data-testid="time-slider"
-      style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(8px)',
-        borderTop: '1px solid rgba(0, 0, 0, 0.1)',
-        padding: '12px 20px 16px',
-        fontFamily: 'system-ui, sans-serif',
-        zIndex: 10,
-      }}
+      className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border shadow-sm px-5 pt-3 pb-4 z-10"
     >
       {/* Current time display */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'baseline',
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
+      <div className="flex justify-center items-baseline gap-2 mb-2">
         <span
           data-testid="forecast-time-label"
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-            color: '#1a1a1a',
-            opacity: isLoading ? 0.5 : 1,
-            transition: 'opacity 0.15s',
-          }}
+          className={`text-lg font-medium text-text-primary tabular-nums transition-opacity duration-150 ${isLoading ? 'opacity-50' : 'opacity-100'}`}
         >
           {dateDisplay}
         </span>
-        <span
-          style={{
-            fontSize: 13,
-            color: '#666',
-            fontWeight: 500,
-          }}
-        >
+        <span className="text-sm text-text-secondary">
           ({daysLabel})
         </span>
-        {isLoading && (
-          <span
-            style={{
-              fontSize: 12,
-              color: '#999',
-            }}
-          >
-            Loading...
-          </span>
-        )}
       </div>
 
       {/* Slider container */}
-      <div style={{ position: 'relative', marginBottom: 4 }}>
-        {/* Tick marks */}
-        <div
-          style={{
-            position: 'absolute',
-            top: -18,
-            left: 0,
-            right: 0,
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '0 4px',
-          }}
-        >
+      <div className="relative mb-1">
+        {/* Tick marks with vertical lines */}
+        <div className="absolute -top-5 left-0 right-0">
           {ticks.map((tick) => (
             <span
               key={tick.hour}
-              style={{
-                fontSize: 11,
-                color: '#888',
-                position: 'absolute',
-                left: `${(tick.hour / 384) * 100}%`,
-                transform: 'translateX(-50%)',
-              }}
+              className="absolute -translate-x-1/2 flex flex-col items-center"
+              style={{ left: `${(tick.hour / 384) * 100}%` }}
             >
-              {tick.label}
+              <span className="text-xs text-text-tertiary tabular-nums">{tick.label}</span>
+              <span className="w-px h-1 bg-border mt-0.5" />
             </span>
           ))}
         </div>
 
-        {/* Range input */}
+        {/* Range input — styled via globals.css */}
         <input
           type="range"
           min={0}
@@ -189,61 +134,15 @@ export default function TimeSlider({
           step={1}
           value={currentIndex}
           onChange={handleChange}
-          style={{
-            width: '100%',
-            height: 6,
-            appearance: 'none',
-            background: 'linear-gradient(to right, #3b82f6, #60a5fa)',
-            borderRadius: 3,
-            cursor: 'pointer',
-            outline: 'none',
-          }}
+          className="w-full"
         />
       </div>
 
-      {/* Labels */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          fontSize: 11,
-          color: '#666',
-          marginTop: 4,
-        }}
-      >
-        <span>Today</span>
+      {/* End labels */}
+      <div className="flex justify-between text-xs text-text-tertiary mt-1">
+        <span>Now</span>
         <span>+16 days</span>
       </div>
-
-      {/* Custom slider thumb styles */}
-      <style>{`
-        input[type="range"]::-webkit-slider-thumb {
-          appearance: none;
-          width: 18px;
-          height: 18px;
-          background: white;
-          border: 2px solid #3b82f6;
-          border-radius: 50%;
-          cursor: pointer;
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-          transition: transform 0.1s;
-        }
-        input[type="range"]::-webkit-slider-thumb:hover {
-          transform: scale(1.1);
-        }
-        input[type="range"]::-webkit-slider-thumb:active {
-          transform: scale(0.95);
-        }
-        input[type="range"]::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          background: white;
-          border: 2px solid #3b82f6;
-          border-radius: 50%;
-          cursor: pointer;
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-        }
-      `}</style>
     </div>
   );
 }
