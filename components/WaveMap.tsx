@@ -350,9 +350,10 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   // Restore previous map view when spot is deselected
   useEffect(() => {
     if (!selectedSpot && previousView && map.current) {
+      const restoreZoom = Math.max(previousView.zoom, 4);
       map.current.flyTo({
-        center: previousView.center,
-        zoom: previousView.zoom,
+        center: previousView.zoom >= 4 ? previousView.center : map.current.getCenter().toArray() as [number, number],
+        zoom: restoreZoom,
         duration: 1500,
         padding: { top: 0, bottom: 0, left: 0, right: 0 },
       });
@@ -693,7 +694,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             if (!data || !data.features.length) return;
 
             const { lng, lat } = e.lngLat;
-            const nearest = findNearestFeature(data, lat, lng, 10);
+            const nearest = findNearestFeature(data, lat, lng, 4);
             if (!nearest) return;
 
             // Save current view before zooming in (only if not already saved)
