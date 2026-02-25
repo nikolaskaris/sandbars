@@ -68,48 +68,22 @@ function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
 const LAYER_CONFIGS: Record<MapLayer, {
   legendTitle: string;
   legendGradient: string;
-  legendLabels: { value: string; position: number }[];
+  legendLabels: string[];
 }> = {
   waveHeight: {
     legendTitle: 'Wave Height',
-    legendGradient: 'linear-gradient(to top, #B4AFA8, #7896C3, #4655A5, #193782)',
-    legendLabels: [
-      { value: '0m', position: 0 },
-      { value: '1m', position: 6.7 },
-      { value: '2m', position: 13.3 },
-      { value: '3m', position: 20 },
-      { value: '5m', position: 33.3 },
-      { value: '8m', position: 53.3 },
-      { value: '10m', position: 66.7 },
-      { value: '15m+', position: 100 },
-    ],
+    legendGradient: 'linear-gradient(to top, #B4AFA8 0%, #6E9BD2 10%, #4682C4 20%, #3A6BB4 35%, #2D56A0 55%, #1F3F8C 75%, #0F2364 100%)',
+    legendLabels: ['0m', '3m', '6m', '9m', '12m', '15m+'],
   },
   wavePeriod: {
     legendTitle: 'Wave Period',
     legendGradient: 'linear-gradient(to top, #B4AFA8, #968CC3, #5F41A5, #41288C)',
-    legendLabels: [
-      { value: '0s', position: 0 },
-      { value: '5s', position: 20 },
-      { value: '8s', position: 32 },
-      { value: '10s', position: 40 },
-      { value: '12s', position: 48 },
-      { value: '15s', position: 60 },
-      { value: '20s+', position: 80 },
-    ],
+    legendLabels: ['0s', '5s', '10s', '15s', '20s', '25s+'],
   },
   wind: {
     legendTitle: 'Wind Speed',
     legendGradient: 'linear-gradient(to top, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
-    legendLabels: [
-      { value: '0', position: 0 },
-      { value: '3', position: 10 },
-      { value: '5', position: 16.7 },
-      { value: '8', position: 26.7 },
-      { value: '10', position: 33.3 },
-      { value: '15', position: 50 },
-      { value: '20', position: 66.7 },
-      { value: '30+', position: 100 },
-    ],
+    legendLabels: ['0', '5', '10', '15', '20', '25+'],
   },
 };
 
@@ -817,7 +791,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
               <div className="fixed inset-0 z-[5]" onClick={() => setShowLayerModal(false)} />
               <div
                 data-testid="layer-modal"
-                className="absolute top-0 left-[calc(100%+8px)] bg-surface rounded-md shadow border border-border p-3 z-10 w-[200px]"
+                className="absolute top-[calc(100%+8px)] left-0 bg-surface rounded-md shadow border border-border p-3 z-10 w-[200px]"
               >
                 {/* Data Layer section */}
                 <div className="text-xs font-medium text-text-tertiary mb-2">Data Layer</div>
@@ -936,15 +910,15 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             className="w-2 rounded-sm shrink-0"
             style={{ height: 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
           />
-          {/* Labels */}
+          {/* Labels — evenly spaced */}
           <div className="relative" style={{ height: 180 }}>
-            {LAYER_CONFIGS[activeLayer].legendLabels.map((tick) => (
+            {LAYER_CONFIGS[activeLayer].legendLabels.map((label, i, arr) => (
               <span
-                key={tick.value}
+                key={label}
                 className="absolute text-xs text-text-secondary tabular-nums leading-none whitespace-nowrap"
-                style={{ bottom: `${tick.position}%`, transform: 'translateY(50%)' }}
+                style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
               >
-                {tick.value}
+                {label}
               </span>
             ))}
           </div>

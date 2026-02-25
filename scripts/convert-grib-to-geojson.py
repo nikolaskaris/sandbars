@@ -43,12 +43,14 @@ MAX_LATITUDE = 85.051129  # degrees — Mercator undefined at poles
 # Color ramps: list of (normalized_position, R, G, B, A)
 # Wave height: 0-15m, warm gray → light blue → deep navy
 WAVE_HEIGHT_COLORS = [
-    (0.0,  180, 175, 168, 140),   # warm muted gray (flat water)
-    (0.1,  155, 165, 180, 160),   # bluish gray
-    (0.25, 120, 150, 195, 180),   # light desaturated blue
-    (0.5,   70, 120, 185, 200),   # medium blue
-    (0.75,  40,  85, 165, 220),   # strong blue
-    (1.0,   25,  55, 130, 235),   # deep navy blue
+    (0.0,   180, 175, 168, 120),   # warm muted gray (flat/negligible)
+    (0.03,  150, 170, 200, 170),   # light steel blue (~0.5m)
+    (0.10,  110, 155, 210, 200),   # clear light blue (~1.5m)
+    (0.20,   70, 130, 200, 215),   # medium blue (~3m)
+    (0.35,   50, 100, 180, 225),   # strong blue (~5m)
+    (0.55,   35,  75, 160, 235),   # deep blue (~8m)
+    (0.75,   25,  55, 130, 240),   # dark navy (~11m)
+    (1.0,    15,  35, 100, 245),   # very dark navy (15m)
 ]
 WAVE_HEIGHT_MIN = 0.0
 WAVE_HEIGHT_MAX = 15.0
