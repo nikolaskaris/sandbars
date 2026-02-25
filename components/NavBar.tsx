@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type View = 'map' | 'favorites' | 'settings';
 
@@ -17,15 +17,7 @@ const NAV_ITEMS: { view: View; label: string; icon: string; testId: string }[] =
 ];
 
 export default function NavBar({ activeView, onViewChange, favoritesCount }: NavBarProps) {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
-    check();
-    const mql = window.matchMedia('(max-width: 768px)');
-    mql.addEventListener('change', check);
-    return () => mql.removeEventListener('change', check);
-  }, []);
+  const isMobile = useIsMobile();
 
   if (isMobile) {
     return (

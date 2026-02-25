@@ -7,9 +7,9 @@ import {
   WindData,
   WaveFeatureProperties,
   GeoJSONData,
-  GeoJSONFeature,
   degreesToCompass,
   parseJsonProperty,
+  findNearestFeature,
 } from '@/lib/wave-utils';
 import { DATA_URLS } from '@/lib/config';
 
@@ -22,28 +22,6 @@ interface FavoriteConditions {
   waveHeight: number;
   swellSummary: string;
   windSummary: string;
-}
-
-function findNearestFeature(
-  geojson: GeoJSONData<WaveFeatureProperties>,
-  lat: number,
-  lng: number
-): GeoJSONFeature<WaveFeatureProperties> | null {
-  let nearest: GeoJSONFeature<WaveFeatureProperties> | null = null;
-  let minDist = Infinity;
-
-  for (const feature of geojson.features) {
-    const [fLng, fLat] = feature.geometry.coordinates;
-    const dx = fLng - lng;
-    const dy = fLat - lat;
-    const dist = dx * dx + dy * dy;
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = feature;
-    }
-  }
-
-  return nearest;
 }
 
 export default function FavoritesPage({ onViewSpot, onFavoritesChange }: FavoritesPageProps) {

@@ -106,3 +106,34 @@ export function formatTime(isoString: string): string {
 export function parseJsonProperty<T>(value: T | string): T {
   return typeof value === 'string' ? JSON.parse(value) : value;
 }
+
+/**
+ * Find the nearest GeoJSON point feature to a given lat/lng.
+ * Optionally filter by maxDistance (in degrees).
+ */
+export function findNearestFeature<T = WaveFeatureProperties>(
+  geojson: GeoJSONData<T>,
+  lat: number,
+  lng: number,
+  maxDistance?: number
+): GeoJSONFeature<T> | null {
+  let nearest: GeoJSONFeature<T> | null = null;
+  let minDist = Infinity;
+
+  for (const feature of geojson.features) {
+    const [fLng, fLat] = feature.geometry.coordinates;
+    const dx = fLng - lng;
+    const dy = fLat - lat;
+    const dist = dx * dx + dy * dy;
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = feature;
+    }
+  }
+
+  if (maxDistance != null && Math.sqrt(minDist) > maxDistance) {
+    return null;
+  }
+
+  return nearest;
+}

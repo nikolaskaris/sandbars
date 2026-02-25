@@ -10,18 +10,19 @@ import VectorOverlay from './VectorOverlay';
 import LayerToggle, { MapLayer } from './LayerToggle';
 import DeckGLOverlay from './DeckGLOverlay';
 import { DATA_URLS } from '@/lib/config';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   SwellData,
   WindData,
   WindWaveData,
   WaveFeatureProperties,
   ForecastMetadata,
-  GeoJSONFeature,
   GeoJSONData,
   degreesToCompass,
   formatTime,
   parseJsonProperty,
   findNearestForecastHour,
+  findNearestFeature,
 } from '@/lib/wave-utils';
 
 // =============================================================================
@@ -312,29 +313,6 @@ function setupLayerClickHandler(
   });
 }
 
-function findNearestWaveFeature(
-  features: GeoJSONFeature<WaveFeatureProperties>[],
-  lat: number,
-  lng: number,
-  maxDistance = 10
-): GeoJSONFeature<WaveFeatureProperties> | null {
-  let nearest: GeoJSONFeature<WaveFeatureProperties> | null = null;
-  let minDist = Infinity;
-
-  for (const feature of features) {
-    const [fLng, fLat] = feature.geometry.coordinates;
-    const dx = fLng - lng;
-    const dy = fLat - lat;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = feature;
-    }
-  }
-
-  return minDist <= maxDistance ? nearest : null;
-}
-
 function formatCoordinateLabel(lat: number, lng: number): string {
   const latStr = `${Math.abs(lat).toFixed(2)}\u00B0${lat >= 0 ? 'N' : 'S'}`;
   const lngStr = `${Math.abs(lng).toFixed(2)}\u00B0${lng >= 0 ? 'E' : 'W'}`;
@@ -377,19 +355,9 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   const [buoyLastUpdated, setBuoyLastUpdated] = useState<Date | null>(null);
 
   // Mobile detection
-  const [isMobile, setIsMobile] = useState(false);
-  const isMobileRef = useRef(false);
-  useEffect(() => {
-    const check = () => {
-      const mobile = window.matchMedia('(max-width: 768px)').matches;
-      setIsMobile(mobile);
-      isMobileRef.current = mobile;
-    };
-    check();
-    const mql = window.matchMedia('(max-width: 768px)');
-    mql.addEventListener('change', check);
-    return () => mql.removeEventListener('change', check);
-  }, []);
+  const isMobile = useIsMobile();
+  const isMobileRef = useRef(isMobile);
+  useEffect(() => { isMobileRef.current = isMobile; }, [isMobile]);
 
   // Spot panel state
   const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
@@ -443,7 +411,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   // Derive vector data from selected spot + current forecast data
   const vectorData = useMemo(() => {
     if (!selectedSpot || !currentData) return null;
-    const nearest = findNearestWaveFeature(currentData.features, selectedSpot.lat, selectedSpot.lng);
+    const nearest = findNearestFeature(currentData, selectedSpot.lat, selectedSpot.lng);
     if (!nearest) return null;
     return {
       swells: parseJsonProperty<SwellData[]>(nearest.properties.swells),
@@ -713,7 +681,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
             if (!data || !data.features.length) return;
 
             const { lng, lat } = e.lngLat;
-            const nearest = findNearestWaveFeature(data.features, lat, lng);
+            const nearest = findNearestFeature(data, lat, lng, 10);
             if (!nearest) return;
 
             // Save current view before zooming in (only if not already saved)

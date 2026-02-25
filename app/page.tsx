@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import NavBar from '@/components/NavBar';
 import WaveMap from '@/components/WaveMap';
 import FavoritesPage from '@/components/FavoritesPage';
@@ -13,19 +14,11 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<View>('map');
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [initialSpot, setInitialSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     setFavoritesCount(getFavorites().length);
   }, [activeView]);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
-    check();
-    const mql = window.matchMedia('(max-width: 768px)');
-    mql.addEventListener('change', check);
-    return () => mql.removeEventListener('change', check);
-  }, []);
 
   const refreshFavoritesCount = useCallback(() => {
     setFavoritesCount(getFavorites().length);

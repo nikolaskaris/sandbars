@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   FORECAST_HOURS,
   SwellData,
@@ -8,9 +9,9 @@ import {
   WaveFeatureProperties,
   ForecastMetadata,
   GeoJSONData,
-  GeoJSONFeature,
   degreesToCompass,
   parseJsonProperty,
+  findNearestFeature,
 } from '@/lib/wave-utils';
 import { DATA_URLS } from '@/lib/config';
 import { isFavorite, addFavorite, removeFavorite, findFavorite } from '@/lib/favorites';
@@ -33,28 +34,6 @@ interface DayGroup {
   date: string;
   dateLabel: string;
   entries: ForecastEntry[];
-}
-
-function findNearestFeature(
-  geojson: GeoJSONData<WaveFeatureProperties>,
-  lat: number,
-  lng: number
-): GeoJSONFeature<WaveFeatureProperties> | null {
-  let nearest: GeoJSONFeature<WaveFeatureProperties> | null = null;
-  let minDist = Infinity;
-
-  for (const feature of geojson.features) {
-    const [fLng, fLat] = feature.geometry.coordinates;
-    const dx = fLng - lng;
-    const dy = fLat - lat;
-    const dist = dx * dx + dy * dy;
-    if (dist < minDist) {
-      minDist = dist;
-      nearest = feature;
-    }
-  }
-
-  return nearest;
 }
 
 function parseValidTime(validTime: string | undefined): Date | null {
@@ -98,7 +77,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('half');
   const [saved, setSaved] = useState(() => isFavorite(location.lat, location.lng));
   const [toast, setToast] = useState<string | null>(null);
@@ -123,15 +102,6 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
     onFavoritesChange?.();
     setTimeout(() => setToast(null), 2000);
   };
-
-  // Check for mobile viewport
-  useEffect(() => {
-    const check = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
-    check();
-    const mql = window.matchMedia('(max-width: 768px)');
-    mql.addEventListener('change', check);
-    return () => mql.removeEventListener('change', check);
-  }, []);
 
   // Prevent body scroll when sheet is fully expanded on mobile
   useEffect(() => {
