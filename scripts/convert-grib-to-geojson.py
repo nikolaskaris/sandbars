@@ -24,7 +24,7 @@ import cfgrib
 import numpy as np
 from pathlib import Path
 from PIL import Image
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import map_coordinates, uniform_filter
 
 # Configuration
 GRIB_DIR = "data/grib"
@@ -147,21 +147,76 @@ def apply_color_lut(grid, lut, min_val, max_val):
 
 
 _land_mask_cache = None
+_water_mask_cache = None
+
+
+def _load_mask_array():
+    """Load and cache the raw mask array from the water mask PNG."""
+    mask_path = Path(__file__).parent / "water_mask_1440x1440.png"
+    img = Image.open(mask_path).convert('L')
+    return np.array(img)
 
 
 def get_land_mask():
-    """Load land mask from pre-generated water mask file."""
+    """Load land mask from pre-generated water mask file (True = land)."""
     global _land_mask_cache
     if _land_mask_cache is None:
         print("  Loading land mask...")
-        mask_path = Path(__file__).parent / "water_mask_1440x1440.png"
-        img = Image.open(mask_path).convert('L')
-        mask_array = np.array(img)
-        # Strictly binary: 255 = water, 0 = land
-        # Land mask: True where land (pixel value < 128)
+        mask_array = _load_mask_array()
         _land_mask_cache = mask_array < 128
         print(f"  Land mask loaded: {_land_mask_cache.sum()} land pixels")
     return _land_mask_cache
+
+
+def get_water_mask():
+    """Load water mask as boolean array (True = water)."""
+    global _water_mask_cache
+    if _water_mask_cache is None:
+        mask_array = _load_mask_array()
+        _water_mask_cache = mask_array >= 128
+    return _water_mask_cache
+
+
+def fill_nearshore_gaps(data_grid, water_mask, iterations=15):
+    """Fill missing/zero pixels by iteratively expanding from valid ocean data.
+
+    Extends data into nearshore gaps so every water pixel has a value.
+    The land mask is applied AFTER this step, so overshooting onto land is fine.
+
+    data_grid:  2D float array (e.g. wave height on the Mercator pixel grid)
+    water_mask: 2D bool array, True = water
+    iterations: number of dilation passes (~1 pixel per pass)
+    """
+    filled = data_grid.copy()
+
+    for _ in range(iterations):
+        # Pixels that are water but have no valid data
+        missing = water_mask & ((filled == 0) | np.isnan(filled))
+        if not missing.any():
+            break
+
+        valid = ~((filled == 0) | np.isnan(filled))
+
+        # Sum of valid neighbor values (3x3 kernel)
+        neighbor_sum = uniform_filter(
+            np.where(valid, filled, 0), size=3, mode='constant', cval=0
+        )
+        # Count of valid neighbors
+        neighbor_count = uniform_filter(
+            valid.astype(np.float64), size=3, mode='constant', cval=0
+        )
+
+        # Average where we have at least one valid neighbor
+        with np.errstate(divide='ignore', invalid='ignore'):
+            neighbor_avg = np.where(
+                neighbor_count > 0, neighbor_sum / neighbor_count, 0
+            )
+
+        # Fill only missing water pixels that have a valid neighbor
+        fill_mask = missing & (neighbor_count > 0)
+        filled[fill_mask] = neighbor_avg[fill_mask]
+
+    return filled
 
 
 def reproject_to_mercator(equirect_array, output_height=PNG_HEIGHT, output_width=PNG_WIDTH):
@@ -220,14 +275,17 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
         ("wind-speed", ws, WIND_SPEED_LUT, WIND_SPEED_MIN, WIND_SPEED_MAX),
     ]
 
-    # Get land mask for crisp coastlines
+    # Get masks
     land_mask = get_land_mask()
+    water_mask = get_water_mask()
 
     for name, data, lut, vmin, vmax in layers:
         # Shift longitude from 0-360 to -180-180
         shifted = np.roll(data, -data.shape[1] // 2, axis=1)
         # Reproject from equirectangular to Web Mercator
         mercator = reproject_to_mercator(shifted)
+        # Fill nearshore data gaps (extend ocean data toward coastlines)
+        mercator = fill_nearshore_gaps(mercator, water_mask)
         # Apply color LUT (NaN becomes transparent — base map shows through)
         rgba = apply_color_lut(mercator, lut, vmin, vmax)
         # Apply land mask for crisp coastlines (skip for wind — renders over land)
