@@ -99,6 +99,23 @@ sandbars/
 **To manually trigger:**
 GitHub → Actions → Update Forecast Data → Run workflow
 
+### Bathymetry Contours
+
+Ocean depth contour lines from GEBCO bathymetric data, served as PMTiles vector tiles.
+
+**Prerequisites:** `brew install gdal tippecanoe` (macOS)
+
+**Workflow:**
+1. Download GEBCO 2024 grid from https://download.gebco.net/ (select NetCDF, sub-region or global)
+2. Run the processing script:
+   ```bash
+   python scripts/generate-bathymetric-contours.py path/to/GEBCO.nc
+   # Custom region:
+   python scripts/generate-bathymetric-contours.py GEBCO.nc --bbox "-77,33.5,-65,43"
+   ```
+3. Output: `public/data/bathymetry-contours.pmtiles`
+4. Upload to Supabase Storage or serve from `public/data/`
+
 ## Planning Documents
 
 | Document | Location | Purpose |

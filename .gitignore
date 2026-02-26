@@ -19,6 +19,11 @@ scripts/ne_*.geojson
 # GeoJSON data files (served from Supabase Storage)
 public/data/*.geojson
 
+# Bathymetry data (large, generated on demand)
+public/data/*.pmtiles
+scripts/*.nc
+data/gebco/
+
 # Images (screenshots, reference images)
 *.png
 *.jpeg
