@@ -22,7 +22,6 @@ from datetime import datetime
 
 import cfgrib
 import numpy as np
-from pathlib import Path
 from PIL import Image
 from scipy.ndimage import map_coordinates, uniform_filter
 
@@ -128,10 +127,7 @@ WIND_SPEED_LUT = build_color_lut(WIND_SPEED_COLORS)
 
 
 def apply_color_lut(grid, lut, min_val, max_val):
-    """Map a 2D float grid to an RGBA image using a prebuilt LUT.
-
-    NaN pixels become fully transparent (base map shows through).
-    """
+    """Map a 2D float grid to an RGBA image using a prebuilt LUT."""
     nan_mask = np.isnan(grid)
     # Normalize to [0, 1]
     normalized = np.clip((grid - min_val) / (max_val - min_val), 0, 1)
@@ -146,56 +142,25 @@ def apply_color_lut(grid, lut, min_val, max_val):
     return rgba
 
 
-_land_mask_cache = None
-_water_mask_cache = None
+def fill_all_gaps(data_grid, iterations=50, fallback_value=0.3):
+    """Fill ALL missing/zero/NaN pixels by iteratively expanding from valid data.
 
+    Fills everywhere — including over land — since the frontend handles
+    masking via MapLibre vector layers. After iterative expansion, any
+    remaining unfilled pixels get fallback_value so no gray spots appear.
 
-def _load_mask_array():
-    """Load and cache the raw mask array from the water mask PNG."""
-    mask_path = Path(__file__).parent / "water_mask_1440x1440.png"
-    img = Image.open(mask_path).convert('L')
-    return np.array(img)
-
-
-def get_land_mask():
-    """Load land mask from pre-generated water mask file (True = land)."""
-    global _land_mask_cache
-    if _land_mask_cache is None:
-        print("  Loading land mask...")
-        mask_array = _load_mask_array()
-        _land_mask_cache = mask_array < 128
-        print(f"  Land mask loaded: {_land_mask_cache.sum()} land pixels")
-    return _land_mask_cache
-
-
-def get_water_mask():
-    """Load water mask as boolean array (True = water)."""
-    global _water_mask_cache
-    if _water_mask_cache is None:
-        mask_array = _load_mask_array()
-        _water_mask_cache = mask_array >= 128
-    return _water_mask_cache
-
-
-def fill_nearshore_gaps(data_grid, water_mask, iterations=15):
-    """Fill missing/zero pixels by iteratively expanding from valid ocean data.
-
-    Extends data into nearshore gaps so every water pixel has a value.
-    The land mask is applied AFTER this step, so overshooting onto land is fine.
-
-    data_grid:  2D float array (e.g. wave height on the Mercator pixel grid)
-    water_mask: 2D bool array, True = water
-    iterations: number of dilation passes (~1 pixel per pass)
+    data_grid:      2D float array (e.g. wave height on the Mercator pixel grid)
+    iterations:     number of dilation passes (~1 pixel per pass)
+    fallback_value: value for pixels that can't be reached by expansion
     """
     filled = data_grid.copy()
 
     for _ in range(iterations):
-        # Pixels that are water but have no valid data
-        missing = water_mask & ((filled == 0) | np.isnan(filled))
+        missing = (filled == 0) | np.isnan(filled)
         if not missing.any():
             break
 
-        valid = ~((filled == 0) | np.isnan(filled))
+        valid = ~missing
 
         # Sum of valid neighbor values (3x3 kernel)
         neighbor_sum = uniform_filter(
@@ -212,9 +177,13 @@ def fill_nearshore_gaps(data_grid, water_mask, iterations=15):
                 neighbor_count > 0, neighbor_sum / neighbor_count, 0
             )
 
-        # Fill only missing water pixels that have a valid neighbor
         fill_mask = missing & (neighbor_count > 0)
         filled[fill_mask] = neighbor_avg[fill_mask]
+
+    # Fill any remaining gaps with fallback value (deep interior of continents)
+    remaining = (filled == 0) | np.isnan(filled)
+    if remaining.any():
+        filled[remaining] = fallback_value
 
     return filled
 
@@ -268,29 +237,27 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
 
     Input grids are 721x1440 (0.25° global, 0-360 lon).
     Output PNGs are 1440x1440 Web Mercator (±85.05° lat, -180 to 180 lon).
+    Data covers the entire globe — frontend handles land masking via vector layers.
     """
+    UNIFORM_ALPHA = 210  # Semi-transparent so base map ocean color blends through
+
     layers = [
-        ("wave-height", swh, WAVE_HEIGHT_LUT, WAVE_HEIGHT_MIN, WAVE_HEIGHT_MAX),
-        ("wave-period", primary_period, WAVE_PERIOD_LUT, WAVE_PERIOD_MIN, WAVE_PERIOD_MAX),
-        ("wind-speed", ws, WIND_SPEED_LUT, WIND_SPEED_MIN, WIND_SPEED_MAX),
+        ("wave-height", swh, WAVE_HEIGHT_LUT, WAVE_HEIGHT_MIN, WAVE_HEIGHT_MAX, 0.3),
+        ("wave-period", primary_period, WAVE_PERIOD_LUT, WAVE_PERIOD_MIN, WAVE_PERIOD_MAX, 5.0),
+        ("wind-speed", ws, WIND_SPEED_LUT, WIND_SPEED_MIN, WIND_SPEED_MAX, 2.0),
     ]
 
-    # Get masks
-    land_mask = get_land_mask()
-    water_mask = get_water_mask()
-
-    for name, data, lut, vmin, vmax in layers:
+    for name, data, lut, vmin, vmax, fallback in layers:
         # Shift longitude from 0-360 to -180-180
         shifted = np.roll(data, -data.shape[1] // 2, axis=1)
         # Reproject from equirectangular to Web Mercator
         mercator = reproject_to_mercator(shifted)
-        # Fill nearshore data gaps (extend ocean data toward coastlines)
-        mercator = fill_nearshore_gaps(mercator, water_mask)
-        # Apply color LUT (NaN becomes transparent — base map shows through)
+        # Fill ALL gaps (ocean + land) so every pixel has data
+        mercator = fill_all_gaps(mercator, fallback_value=fallback)
+        # Apply color LUT
         rgba = apply_color_lut(mercator, lut, vmin, vmax)
-        # Apply land mask for crisp coastlines (skip for wind — renders over land)
-        if "wind" not in name:
-            rgba[land_mask] = [0, 0, 0, 0]
+        # Uniform alpha — no geographic masking (frontend handles land via vector layers)
+        rgba[:, :, 3] = UNIFORM_ALPHA
         # Save PNG
         img = Image.fromarray(rgba, 'RGBA')
         png_path = os.path.join(output_dir, f"{name}-f{forecast_hour:03d}.png")
