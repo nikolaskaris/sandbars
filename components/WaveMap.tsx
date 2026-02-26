@@ -926,29 +926,29 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
       {/* Vertical Legend — bottom-right, above TimeSlider */}
       <div
         data-testid="legend"
-        className="absolute z-20 bottom-[110px] flex flex-col items-end overflow-hidden max-h-[calc(100vh-280px)]"
+        className="absolute z-20 bottom-[110px] flex items-end gap-1.5"
         style={{ right: 16 }}
       >
-        <div className="text-[10px] md:text-xs font-medium text-text-primary/80 mb-1 text-right whitespace-nowrap shrink-0 drop-shadow-sm">
-          {LAYER_CONFIGS[activeLayer].legendTitle}
+        {/* Labels — float to the left of the card */}
+        <div className="relative shrink-0 mb-1" style={{ height: isMobile ? 100 : 140 }}>
+          {(isMobile ? LAYER_CONFIGS[activeLayer].mobileLegendLabels : LAYER_CONFIGS[activeLayer].legendLabels).map((label, i, arr) => (
+            <span
+              key={label}
+              className="absolute right-0 text-[10px] text-text-primary/70 tabular-nums leading-none whitespace-nowrap drop-shadow-sm"
+              style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
+            >
+              {label}
+            </span>
+          ))}
         </div>
-        <div className="flex gap-1 md:gap-1.5 flex-1 min-h-0">
-          {/* Labels — evenly spaced, to the left of gradient */}
-          <div className="relative" style={{ height: isMobile ? 120 : 180 }}>
-            {(isMobile ? LAYER_CONFIGS[activeLayer].mobileLegendLabels : LAYER_CONFIGS[activeLayer].legendLabels).map((label, i, arr) => (
-              <span
-                key={label}
-                className="absolute right-0 text-[10px] md:text-xs text-text-primary/70 tabular-nums leading-none whitespace-nowrap drop-shadow-sm"
-                style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          {/* Gradient bar */}
+        {/* Card — matches zoom control styling */}
+        <div className="w-9 bg-surface rounded-md shadow-sm border border-border flex flex-col items-center py-2 gap-1.5">
+          <span className="text-[10px] font-medium text-text-secondary leading-tight text-center">
+            {LAYER_CONFIGS[activeLayer].legendTitle}
+          </span>
           <div
-            className="w-1.5 md:w-2 rounded-sm shrink-0"
-            style={{ height: isMobile ? 120 : 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
+            className="w-1.5 rounded-sm"
+            style={{ height: isMobile ? 100 : 140, background: LAYER_CONFIGS[activeLayer].legendGradient }}
           />
         </div>
       </div>
