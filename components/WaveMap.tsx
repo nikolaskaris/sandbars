@@ -984,8 +984,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {/* Vertical Legend */}
       <div
         data-testid="legend"
-        className="absolute left-3 z-10 bg-surface/80 rounded-md shadow-sm border border-border px-2 py-2.5"
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
+        className="absolute z-10 bg-surface/80 rounded-md shadow-sm border border-border px-2 py-2.5"
+        style={{ bottom: '120px', left: '12px' }}
       >
         <div className="text-xs font-medium text-text-primary mb-2 text-center whitespace-nowrap">
           {LAYER_CONFIGS[activeLayer].legendTitle}
