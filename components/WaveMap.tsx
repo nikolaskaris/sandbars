@@ -540,7 +540,14 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
     if (!map.current) return;
     const source = map.current.getSource('forecast-raster') as maplibregl.ImageSource | undefined;
     if (!source) return;
-    source.updateImage({ url: getRasterUrl(activeLayer, currentHour) });
+    try {
+      source.updateImage({ url: getRasterUrl(activeLayer, currentHour) });
+    } catch (e) {
+      // MapLibre throws when a previous image fetch is aborted (e.g., rapid scrubbing)
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      if (e instanceof Error && e.message?.includes('abort')) return;
+      console.error('Failed to update forecast raster:', e);
+    }
   }, [currentHour, activeLayer]);
 
   // Initialize map
@@ -562,6 +569,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
     }
 
     map.current.on('error', (e) => {
+      // Suppress abort errors from rapid image source updates
+      if (e.error?.message?.includes('abort')) return;
       console.error('Map error:', e.error);
     });
 
