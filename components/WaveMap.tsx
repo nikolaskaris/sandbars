@@ -923,32 +923,32 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         </div>
       )}
 
-      {/* Vertical Legend — safe zone between top controls and TimeSlider */}
+      {/* Vertical Legend — bottom-right, above TimeSlider */}
       <div
         data-testid="legend"
-        className="absolute left-3 z-20 bottom-[100px] bg-surface/80 rounded-md shadow-sm border border-border px-1.5 py-1.5 md:px-2 md:py-2 flex flex-col overflow-hidden max-h-[calc(100vh-280px)]"
+        className="absolute right-3 z-20 bottom-[100px] flex flex-col items-end overflow-hidden max-h-[calc(100vh-280px)]"
       >
-        <div className="text-[11px] md:text-xs font-medium text-text-primary mb-1 md:mb-1.5 text-center whitespace-nowrap shrink-0">
+        <div className="text-[10px] md:text-xs font-medium text-text-primary/80 mb-1 text-right whitespace-nowrap shrink-0 drop-shadow-sm">
           {LAYER_CONFIGS[activeLayer].legendTitle}
         </div>
         <div className="flex gap-1 md:gap-1.5 flex-1 min-h-0">
-          {/* Gradient bar */}
-          <div
-            className="w-1.5 md:w-2 rounded-sm shrink-0"
-            style={{ height: isMobile ? 120 : 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
-          />
-          {/* Labels — evenly spaced */}
+          {/* Labels — evenly spaced, to the left of gradient */}
           <div className="relative" style={{ height: isMobile ? 120 : 180 }}>
             {(isMobile ? LAYER_CONFIGS[activeLayer].mobileLegendLabels : LAYER_CONFIGS[activeLayer].legendLabels).map((label, i, arr) => (
               <span
                 key={label}
-                className="absolute text-[10px] md:text-xs text-text-secondary tabular-nums leading-none whitespace-nowrap"
+                className="absolute right-0 text-[10px] md:text-xs text-text-primary/70 tabular-nums leading-none whitespace-nowrap drop-shadow-sm"
                 style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
               >
                 {label}
               </span>
             ))}
           </div>
+          {/* Gradient bar */}
+          <div
+            className="w-1.5 md:w-2 rounded-sm shrink-0"
+            style={{ height: isMobile ? 120 : 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
+          />
         </div>
       </div>
 
