@@ -18,7 +18,7 @@ export default function HomePage() {
 
   // Lifted layer state (was inside WaveMap)
   const [activeLayer, setActiveLayer] = useState<MapLayer>('waveHeight');
-  const [showBuoys, setShowBuoys] = useState(true);
+  const [showBuoys, setShowBuoys] = useState(false);
 
   useEffect(() => {
     setFavoritesCount(getFavorites().length);

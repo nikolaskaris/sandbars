@@ -326,6 +326,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   const [waveError, setWaveError] = useState<string | null>(null);
 
   // (activeLayer and showBuoys are now controlled via props)
+  const showBuoysRef = useRef(showBuoys);
+  useEffect(() => { showBuoysRef.current = showBuoys; }, [showBuoys]);
 
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
@@ -741,6 +743,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         if (buoyResult.status === 'fulfilled') {
           const buoyData = buoyResult.value;
           setupBuoyLayer(map.current, buoyData);
+          // Apply current visibility state immediately after layer creation
+          map.current.setLayoutProperty('buoy-circles', 'visibility', showBuoysRef.current ? 'visible' : 'none');
           setupLayerClickHandler(
             map.current,
             popup.current,
