@@ -82,6 +82,8 @@ function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
 // Layer Configurations
 // =============================================================================
 
+// Legend gradients match the actual raster LUT colors from convert-grib-to-geojson.py
+// Direction: "to bottom" = top is max value, bottom is min value
 const LEGEND_CONFIG: Record<MapLayer, {
   unit: string;
   gradient: string;
@@ -89,17 +91,17 @@ const LEGEND_CONFIG: Record<MapLayer, {
 }> = {
   waveHeight: {
     unit: 'm',
-    gradient: 'linear-gradient(to bottom, rgb(220,30,30), rgb(240,140,30), rgb(200,220,50), rgb(0,200,100), rgb(0,180,220), rgb(0,120,200), rgb(30,60,180))',
+    gradient: 'linear-gradient(to bottom, rgb(15,35,100) 0%, rgb(25,55,130) 25%, rgb(35,75,160) 45%, rgb(50,100,180) 65%, rgb(70,130,200) 80%, rgb(110,155,210) 90%, rgb(150,170,200) 97%, rgb(180,175,168) 100%)',
     labels: ['15', '12', '9', '6', '3', '0'],
   },
   wavePeriod: {
     unit: 's',
-    gradient: 'linear-gradient(to bottom, rgb(140,40,180), rgb(180,100,200), rgb(80,200,80), rgb(0,180,120), rgb(0,140,200), rgb(40,60,180))',
+    gradient: 'linear-gradient(to bottom, rgb(65,40,140) 0%, rgb(95,65,165) 25%, rgb(120,100,180) 50%, rgb(150,140,195) 75%, rgb(165,160,180) 90%, rgb(180,175,168) 100%)',
     labels: ['25', '20', '15', '10', '5', '0'],
   },
   wind: {
     unit: 'm/s',
-    gradient: 'linear-gradient(to bottom, rgb(200,30,30), rgb(240,100,30), rgb(220,180,30), rgb(160,210,50), rgb(40,190,80), rgb(60,160,120), rgb(100,120,140))',
+    gradient: 'linear-gradient(to bottom, rgb(15,100,100) 0%, rgb(30,130,125) 25%, rgb(60,155,150) 50%, rgb(120,175,170) 75%, rgb(160,175,172) 90%, rgb(180,175,168) 100%)',
     labels: ['30', '25', '20', '15', '10', '5', '0'],
   },
 };
@@ -963,6 +965,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         </span>
         <div style={{ display: 'flex', gap: 3 }}>
           <div
+            data-testid="legend-gradient"
             role="img"
             aria-label={`Color scale for ${activeLayer}`}
             style={{

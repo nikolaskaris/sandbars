@@ -63,6 +63,53 @@ test.describe('Smoke Tests - UI Elements', () => {
     const errorBanner = page.locator('[data-testid="error-banner"]');
     await expect(errorBanner).not.toBeVisible();
   });
+
+  test('legend gradient changes when layer is switched', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
+
+    const gradient = page.locator('[data-testid="legend-gradient"]');
+    await expect(gradient).toBeVisible();
+
+    // Read initial gradient (waveHeight default)
+    const initialBg = await gradient.evaluate(el => el.style.background);
+
+    // Open layers panel and switch to wavePeriod
+    await expect(async () => {
+      await page.locator('[data-testid="nav-layers"]').click();
+      await expect(page.locator('[data-testid="layers-panel"]')).toBeVisible();
+    }).toPass({ timeout: 10000 });
+    await page.locator('[data-testid="layer-wavePeriod"]').click();
+
+    const periodBg = await gradient.evaluate(el => el.style.background);
+    expect(periodBg).not.toEqual(initialBg);
+
+    // Switch to wind
+    await page.locator('[data-testid="layer-wind"]').click();
+    const windBg = await gradient.evaluate(el => el.style.background);
+    expect(windBg).not.toEqual(initialBg);
+    expect(windBg).not.toEqual(periodBg);
+  });
+
+  test('legend labels update per layer', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
+
+    const legend = page.locator('[data-testid="legend"]');
+
+    // Default layer (waveHeight) shows "m"
+    await expect(legend).toContainText('m');
+
+    // Open layers panel and switch to wavePeriod
+    await expect(async () => {
+      await page.locator('[data-testid="nav-layers"]').click();
+      await expect(page.locator('[data-testid="layers-panel"]')).toBeVisible();
+    }).toPass({ timeout: 10000 });
+    await page.locator('[data-testid="layer-wavePeriod"]').click();
+    await expect(legend).toContainText('s');
+
+    // Switch to wind
+    await page.locator('[data-testid="layer-wind"]').click();
+    await expect(legend).toContainText('m/s');
+  });
 });
 
 // These tests require WebGL/GPU — skip in headless mode (no GPU available)
