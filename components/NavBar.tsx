@@ -62,9 +62,9 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
       data-testid="nav-bar"
       className="fixed top-0 left-0 bottom-0 w-[72px] bg-surface border-r border-border flex flex-col items-center z-50 shadow-sm"
     >
-      {/* Wordmark */}
+      {/* Logo */}
       <div className="py-4">
-        <span className="text-sm font-medium text-text-primary">Sandbars</span>
+        <img src="/logo.png" alt="Sandbars" className="w-10 h-10 mx-auto" />
       </div>
 
       {/* Top nav items */}
