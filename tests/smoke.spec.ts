@@ -18,14 +18,16 @@ test.describe('Smoke Tests - UI Elements', () => {
   });
 
   test('buoy toggle shows NDBC label', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'load' });
 
-    // Open layer modal first — buoy toggle is inside it
-    await page.locator('[data-testid="layers-button"]').click();
-    // Wait for modal to render before checking toggle
-    await expect(page.locator('[data-testid="layer-modal"]')).toBeVisible({ timeout: 5000 });
+    // Retry click+verify to handle React hydration timing
+    await expect(async () => {
+      await page.locator('[data-testid="layers-button"]').click();
+      await expect(page.locator('[data-testid="layer-modal"]')).toBeVisible();
+    }).toPass({ timeout: 10000 });
+
     const toggle = page.locator('[data-testid="buoy-toggle"]');
-    await expect(toggle).toBeVisible({ timeout: 5000 });
+    await expect(toggle).toBeVisible();
     await expect(toggle).toContainText('NDBC');
   });
 
@@ -61,11 +63,10 @@ test.describe('Smoke Tests - UI Elements', () => {
   });
 });
 
-// These tests require WebGL/GPU support and don't work in headless CI
-// Run locally with: npx playwright test --headed --grep "WebGL"
+// These tests require WebGL/GPU — skip in headless mode (no GPU available)
+// Run with: HEADED=1 npx playwright test --headed --grep "WebGL"
 test.describe('Smoke Tests - Map & Data (requires WebGL)', () => {
-  // Skip in CI - WebGL not available in headless mode
-  test.skip(() => !!process.env.CI, 'WebGL tests skipped in CI');
+  test.skip(() => process.env.HEADED !== '1', 'WebGL tests require headed mode');
 
   test('map canvas appears after initialization', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });

@@ -513,12 +513,22 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-      center: [0, 0],
-      zoom: 2,
-      doubleClickZoom: true,
+    try {
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+        center: [0, 0],
+        zoom: 2,
+        doubleClickZoom: true,
+      });
+    } catch (err) {
+      console.error('Failed to initialize map:', err);
+      setWaveError('Map failed to load (WebGL not available)');
+      return;
+    }
+
+    map.current.on('error', (e) => {
+      console.error('Map error:', e.error);
     });
 
     // Expose map instance for E2E testing
@@ -866,7 +876,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
       {!currentData && waveError && (
         <div
           data-testid="error-overlay"
-          className="absolute inset-0 flex flex-col items-center justify-center bg-surface/[0.97] z-[1000] p-5 text-center"
+          className="absolute inset-0 flex flex-col items-center justify-center bg-surface/[0.97] z-[5] p-5 text-center"
         >
           <AlertTriangle className="h-10 w-10 text-text-tertiary mb-4" strokeWidth={1.5} />
           <h2 className="text-xl font-medium text-text-primary mb-2">
