@@ -21,6 +21,11 @@ body {
   font-family: inherit;
 }
 
+/* Map overlay text shadow — readable over any map color */
+.map-text-shadow {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 0 8px rgba(255,255,255,0.8);
+}
+
 /* Range slider — custom thumb and track */
 input[type="range"] {
   -webkit-appearance: none;
@@ -37,12 +42,12 @@ input[type="range"]::-webkit-slider-runnable-track {
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: theme("borderRadius.full");
   background: white;
   border: 2px solid theme("colors.accent.DEFAULT");
-  margin-top: -7px;
+  margin-top: -5px;
   box-shadow: theme("boxShadow.sm");
 }
 
@@ -53,8 +58,8 @@ input[type="range"]::-moz-range-track {
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: theme("borderRadius.full");
   background: white;
   border: 2px solid theme("colors.accent.DEFAULT");

@@ -95,54 +95,59 @@ export default function TimeSlider({
   return (
     <div
       data-testid="time-slider"
-      className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border shadow-sm px-5 pt-3 pb-4 z-10"
+      className="absolute bottom-0 left-0 right-0 z-10"
     >
-      {/* Current time display */}
-      <div className="flex justify-center items-baseline gap-2 mb-4">
-        <span
-          data-testid="forecast-time-label"
-          className={`text-lg font-medium text-text-primary tabular-nums transition-opacity duration-150 ${isLoading ? 'opacity-50' : 'opacity-100'}`}
-        >
-          {dateDisplay}
-        </span>
-        <span className="text-sm text-text-secondary">
-          ({daysLabel})
-        </span>
-      </div>
+      {/* Subtle bottom gradient fade for contrast */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent pointer-events-none" />
 
-      {/* Tick labels row — fixed height, separate from slider */}
-      <div className="relative h-4 mb-1">
-        {ticks.map((tick, i) => {
-          // Mobile: show only days 0, 6, 12, 16 (skip indices 1 and 3 which are days 3 and 9)
-          const hiddenOnMobile = i === 1 || i === 3;
-          return (
-            <span
-              key={tick.hour}
-              className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
-              style={{ left: `${(tick.hour / 384) * 100}%` }}
-            >
-              <span className="text-xs text-text-tertiary tabular-nums leading-none">{tick.label}</span>
-              <span className="w-px h-1 bg-border mt-0.5" />
-            </span>
-          );
-        })}
-      </div>
+      <div className="relative px-4 pt-1.5 pb-2.5">
+        {/* Current time display */}
+        <div className="flex justify-center items-baseline gap-1.5 mb-2">
+          <span
+            data-testid="forecast-time-label"
+            className={`text-sm font-medium text-text-primary tabular-nums transition-opacity duration-150 map-text-shadow ${isLoading ? 'opacity-50' : 'opacity-100'}`}
+          >
+            {dateDisplay}
+          </span>
+          <span className="text-xs text-text-secondary map-text-shadow">
+            ({daysLabel})
+          </span>
+        </div>
 
-      {/* Range input — styled via globals.css */}
-      <input
-        type="range"
-        min={0}
-        max={FORECAST_HOURS.length - 1}
-        step={1}
-        value={currentIndex}
-        onChange={handleChange}
-        className="w-full"
-      />
+        {/* Tick labels row — fixed height, separate from slider */}
+        <div className="relative h-3.5 mb-0.5">
+          {ticks.map((tick, i) => {
+            // Mobile: show only days 0, 6, 12, 16 (skip indices 1 and 3 which are days 3 and 9)
+            const hiddenOnMobile = i === 1 || i === 3;
+            return (
+              <span
+                key={tick.hour}
+                className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
+                style={{ left: `${(tick.hour / 384) * 100}%` }}
+              >
+                <span className="text-[10px] text-text-tertiary tabular-nums leading-none map-text-shadow">{tick.label}</span>
+                <span className="w-px h-0.5 bg-border mt-0.5" />
+              </span>
+            );
+          })}
+        </div>
 
-      {/* End labels */}
-      <div className="flex justify-between text-xs text-text-tertiary mt-1">
-        <span>Now</span>
-        <span>+16 days</span>
+        {/* Range input — styled via globals.css */}
+        <input
+          type="range"
+          min={0}
+          max={FORECAST_HOURS.length - 1}
+          step={1}
+          value={currentIndex}
+          onChange={handleChange}
+          className="w-full"
+        />
+
+        {/* End labels */}
+        <div className="flex justify-between text-[10px] text-text-tertiary mt-0.5 map-text-shadow">
+          <span>Now</span>
+          <span>+16 days</span>
+        </div>
       </div>
     </div>
   );

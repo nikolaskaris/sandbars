@@ -926,7 +926,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
       {/* Vertical Legend — bottom-right, above TimeSlider */}
       <div
         data-testid="legend"
-        className="absolute right-3 z-20 bottom-[100px] flex flex-col items-end overflow-hidden max-h-[calc(100vh-280px)]"
+        className="absolute z-20 bottom-[110px] flex flex-col items-end overflow-hidden max-h-[calc(100vh-280px)]"
+        style={{ right: 16 }}
       >
         <div className="text-[10px] md:text-xs font-medium text-text-primary/80 mb-1 text-right whitespace-nowrap shrink-0 drop-shadow-sm">
           {LAYER_CONFIGS[activeLayer].legendTitle}
