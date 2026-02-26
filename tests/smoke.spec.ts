@@ -10,11 +10,11 @@ test.describe('Smoke Tests - UI Elements', () => {
     await expect(page.locator('[data-testid="nav-layers"]')).toBeVisible();
   });
 
-  test('legend contains wave height label', async ({ page }) => {
+  test('legend contains unit label', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const legend = page.locator('[data-testid="legend"]');
-    await expect(legend).toContainText('Wave Height');
+    await expect(legend).toContainText('m');
   });
 
   test('buoy toggle shows NDBC label', async ({ page }) => {
@@ -31,13 +31,15 @@ test.describe('Smoke Tests - UI Elements', () => {
     await expect(toggle).toContainText('NDBC');
   });
 
-  test('time slider has range input', async ({ page }) => {
+  test('time slider has block grid', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    const slider = page.locator('[data-testid="time-slider"] input[type="range"]');
+    const slider = page.locator('[data-testid="time-slider"]');
     await expect(slider).toBeVisible();
-    await expect(slider).toHaveAttribute('min', '0');
-    await expect(slider).toHaveAttribute('max', '104');
+    // Hidden range input for accessibility
+    const input = slider.locator('input[type="range"]');
+    await expect(input).toHaveAttribute('min', '0');
+    await expect(input).toHaveAttribute('max', '104');
   });
 
   test('forecast time label is visible', async ({ page }) => {

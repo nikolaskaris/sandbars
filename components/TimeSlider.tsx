@@ -1,153 +1,355 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { FORECAST_HOURS } from '@/lib/wave-utils';
+import { MapLayer } from './LayerToggle';
 
 interface TimeSliderProps {
   currentHour: number;
   validTime: string | null;
   referenceTime: string | null;
+  activeLayer: MapLayer;
   isLoading: boolean;
   onChange: (hour: number) => void;
 }
 
+const LAYER_LABELS: Record<MapLayer, string> = {
+  waveHeight: 'Wave Height',
+  wavePeriod: 'Wave Period',
+  wind: 'Wind Speed',
+};
+
 /**
- * Format a date string for display
- * e.g., "Thu, Jan 30 6:00 PM"
+ * Compute block metadata for each forecast hour:
+ * - isNight: local hour is 21-23 or 0-5
+ * - isDayBoundary: local hour crosses midnight (new calendar day)
+ * - dayLabel: "Thu", "Fri", etc. for the first block of a new day
  */
-function formatDateTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
+function computeBlockMeta(referenceTime: string | null) {
+  if (!referenceTime) return [];
+
+  const refDate = new Date(referenceTime);
+
+  return FORECAST_HOURS.map((fh, i) => {
+    const blockDate = new Date(refDate.getTime() + fh * 3600 * 1000);
+    const localHour = blockDate.getHours();
+    const isNight = localHour >= 21 || localHour <= 5;
+
+    // Day boundary: check if this block starts a new calendar day vs previous block
+    let isDayBoundary = false;
+    if (i === 0) {
+      isDayBoundary = true;
+    } else {
+      const prevDate = new Date(refDate.getTime() + FORECAST_HOURS[i - 1] * 3600 * 1000);
+      isDayBoundary = blockDate.toLocaleDateString() !== prevDate.toLocaleDateString();
+    }
+
+    const dayLabel = blockDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+    return { isNight, isDayBoundary, dayLabel, date: blockDate };
   });
 }
 
 /**
- * Calculate days difference between two dates
+ * Format time for the pill: "10am Thu" or "3pm Sat"
  */
-function getDaysDiff(validTime: string, referenceTime: string): number {
-  const valid = new Date(validTime);
-  const reference = new Date(referenceTime);
-  const diffMs = valid.getTime() - reference.getTime();
-  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+function formatTimePill(isoString: string): string {
+  const date = new Date(isoString);
+  const hour = date.getHours();
+  const ampm = hour >= 12 ? 'pm' : 'am';
+  const h = hour % 12 || 12;
+  const day = date.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${h}${ampm} ${day}`;
 }
 
 /**
- * Generate tick marks for the slider
+ * Compute day label positions (index of first block in each new day)
  */
-function getTickDates(referenceTime: string | null): { hour: number; label: string }[] {
-  if (!referenceTime) return [];
-
-  const refDate = new Date(referenceTime);
-  const ticks: { hour: number; label: string }[] = [];
-
-  // Show ticks at day 0, 3, 6, 9, 12, 16
-  const tickDays = [0, 3, 6, 9, 12, 16];
-
-  for (const day of tickDays) {
-    const hour = day * 24;
-    if (hour <= 384) {
-      const tickDate = new Date(refDate.getTime() + day * 24 * 60 * 60 * 1000);
-      ticks.push({
-        hour,
-        label: tickDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      });
+function computeDayLabels(blockMeta: ReturnType<typeof computeBlockMeta>) {
+  const labels: { index: number; label: string }[] = [];
+  for (let i = 0; i < blockMeta.length; i++) {
+    if (blockMeta[i].isDayBoundary) {
+      labels.push({ index: i, label: blockMeta[i].dayLabel });
     }
   }
-
-  return ticks;
+  // Show every day for first ~4 days, then every other day
+  return labels.map((l, i) => ({
+    ...l,
+    visible: i < 4 || i % 2 === 0,
+  }));
 }
 
 export default function TimeSlider({
   currentHour,
   validTime,
   referenceTime,
+  activeLayer,
   isLoading,
   onChange,
 }: TimeSliderProps) {
-  // Find current index in forecast hours array
+  const [isPlaying, setIsPlaying] = useState(false);
+  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const currentIndex = useMemo(
     () => FORECAST_HOURS.indexOf(currentHour),
     [currentHour]
   );
 
-  // Handle slider change
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const index = parseInt(e.target.value, 10);
-      const hour = FORECAST_HOURS[index];
-      onChange(hour);
-    },
-    [onChange]
+  const blockMeta = useMemo(
+    () => computeBlockMeta(referenceTime),
+    [referenceTime]
   );
 
-  // Calculate display values
-  const daysDiff = validTime && referenceTime ? getDaysDiff(validTime, referenceTime) : 0;
-  const dateDisplay = validTime ? formatDateTime(validTime) : '\u2014';
-  const daysLabel = `+${daysDiff}d`;
-  const ticks = getTickDates(referenceTime);
+  const dayLabels = useMemo(
+    () => computeDayLabels(blockMeta),
+    [blockMeta]
+  );
+
+  const timePillText = validTime ? formatTimePill(validTime) : '\u2014';
+  const totalBlocks = FORECAST_HOURS.length;
+
+  // Play animation: use ref to access latest currentIndex inside interval
+  const currentIndexRef = useRef(currentIndex);
+  currentIndexRef.current = currentIndex;
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      const next = currentIndexRef.current + 1;
+      if (next >= FORECAST_HOURS.length) {
+        setIsPlaying(false);
+        return;
+      }
+      onChange(FORECAST_HOURS[next]);
+    }, 500);
+    playIntervalRef.current = interval;
+    return () => clearInterval(interval);
+  }, [isPlaying, onChange]);
+
+  const stepBack = useCallback(() => {
+    const prev = Math.max(0, currentIndex - 1);
+    onChange(FORECAST_HOURS[prev]);
+  }, [currentIndex, onChange]);
+
+  const stepForward = useCallback(() => {
+    const next = Math.min(FORECAST_HOURS.length - 1, currentIndex + 1);
+    onChange(FORECAST_HOURS[next]);
+  }, [currentIndex, onChange]);
+
+  // Keyboard navigation
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepBack(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); stepForward(); }
+    else if (e.key === ' ') { e.preventDefault(); setIsPlaying(p => !p); }
+  }, [stepBack, stepForward]);
+
+  // Pill position: percentage based on active block index
+  const pillLeft = totalBlocks > 0 ? (currentIndex / (totalBlocks - 1)) * 100 : 0;
 
   return (
     <div
       data-testid="time-slider"
-      className="absolute bottom-0 left-0 right-0 z-10"
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        padding: '8px 16px 12px',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      }}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="slider"
+      aria-valuemin={0}
+      aria-valuemax={FORECAST_HOURS.length - 1}
+      aria-valuenow={currentIndex}
+      aria-label="Forecast time"
     >
-      {/* Subtle bottom gradient fade for contrast */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent pointer-events-none" />
+      {/* Hidden range input for test compatibility */}
+      <input
+        type="range"
+        min={0}
+        max={FORECAST_HOURS.length - 1}
+        step={1}
+        value={currentIndex}
+        onChange={(e) => onChange(FORECAST_HOURS[parseInt(e.target.value, 10)])}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
 
-      <div className="relative px-4 pt-1.5 pb-2.5">
-        {/* Current time display */}
-        <div className="flex justify-center items-baseline gap-1.5 mb-2">
-          <span
-            data-testid="forecast-time-label"
-            className={`text-sm font-medium text-text-primary tabular-nums transition-opacity duration-150 map-text-shadow ${isLoading ? 'opacity-50' : 'opacity-100'}`}
-          >
-            {dateDisplay}
+      {/* Time Pill — floating above active block */}
+      <div style={{
+        position: 'relative',
+        height: 24,
+        marginBottom: 4,
+      }}>
+        <div
+          data-testid="forecast-time-label"
+          style={{
+            position: 'absolute',
+            left: `${pillLeft}%`,
+            transform: 'translateX(-50%)',
+            background: 'rgba(30, 30, 25, 0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            borderRadius: 4,
+            padding: '2px 8px',
+            whiteSpace: 'nowrap',
+            transition: 'left 0.1s ease-out',
+            opacity: isLoading ? 0.5 : 1,
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 5,
+          }}
+        >
+          <span style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'rgba(255, 255, 255, 0.9)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {timePillText}
           </span>
-          <span className="text-xs text-text-secondary map-text-shadow">
-            ({daysLabel})
+          <span style={{
+            fontSize: 11,
+            color: 'rgba(255, 255, 255, 0.45)',
+          }}>
+            &middot;
+          </span>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 500,
+            color: '#C17F5E',
+          }}>
+            {LAYER_LABELS[activeLayer]}
           </span>
         </div>
+      </div>
 
-        {/* Tick labels row — fixed height, separate from slider */}
-        <div className="relative h-3.5 mb-0.5">
-          {ticks.map((tick, i) => {
-            // Mobile: show only days 0, 6, 12, 16 (skip indices 1 and 3 which are days 3 and 9)
-            const hiddenOnMobile = i === 1 || i === 3;
-            return (
-              <span
-                key={tick.hour}
-                className={`absolute -translate-x-1/2 flex flex-col items-center ${hiddenOnMobile ? 'hidden md:flex' : ''}`}
-                style={{ left: `${(tick.hour / 384) * 100}%` }}
-              >
-                <span className="text-[10px] text-text-tertiary tabular-nums leading-none map-text-shadow">{tick.label}</span>
-                <span className="w-px h-0.5 bg-border mt-0.5" />
-              </span>
-            );
-          })}
-        </div>
+      {/* Day Labels — above block grid */}
+      <div style={{
+        position: 'relative',
+        height: 14,
+        marginBottom: 2,
+      }}>
+        {dayLabels.map((dl) => (
+          dl.visible && (
+            <span
+              key={dl.index}
+              style={{
+                position: 'absolute',
+                left: `${(dl.index / (totalBlocks - 1)) * 100}%`,
+                fontSize: 10,
+                fontWeight: 500,
+                color: 'rgba(255, 255, 255, 0.5)',
+                textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                whiteSpace: 'nowrap',
+                lineHeight: 1,
+              }}
+            >
+              {dl.label}
+            </span>
+          )
+        ))}
+      </div>
 
-        {/* Range input — styled via globals.css */}
-        <input
-          type="range"
-          min={0}
-          max={FORECAST_HOURS.length - 1}
-          step={1}
-          value={currentIndex}
-          onChange={handleChange}
-          className="w-full"
-        />
+      {/* Block Grid */}
+      <div
+        ref={containerRef}
+        style={{
+          display: 'flex',
+          gap: 1,
+          borderRadius: 3,
+          overflow: 'hidden',
+          cursor: 'pointer',
+        }}
+      >
+        {FORECAST_HOURS.map((fh, i) => {
+          const meta = blockMeta[i];
+          const isActive = i === currentIndex;
 
-        {/* End labels */}
-        <div className="flex justify-between text-[10px] text-text-tertiary mt-0.5 map-text-shadow">
-          <span>Now</span>
-          <span>+16 days</span>
-        </div>
+          let bgColor: string;
+          if (isActive) {
+            bgColor = '#C17F5E';
+          } else if (meta?.isNight) {
+            bgColor = 'rgba(30, 30, 25, 0.5)';
+          } else {
+            bgColor = 'rgba(255, 255, 255, 0.18)';
+          }
+
+          return (
+            <div
+              key={fh}
+              onClick={() => onChange(fh)}
+              aria-current={isActive ? 'true' : undefined}
+              style={{
+                flex: 1,
+                height: 22,
+                background: bgColor,
+                borderLeft: meta?.isDayBoundary && i > 0
+                  ? '1px solid rgba(255, 255, 255, 0.25)'
+                  : 'none',
+                transition: 'background 0.08s ease',
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Controls Row */}
+      <div style={{
+        display: 'flex',
+        gap: 2,
+        marginTop: 6,
+      }}>
+        <button
+          onClick={stepBack}
+          aria-label="Step back"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: 14,
+            padding: '2px 4px',
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          &#8249;
+        </button>
+        <button
+          onClick={() => setIsPlaying(p => !p)}
+          aria-label={isPlaying ? 'Pause forecast animation' : 'Play forecast animation'}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: 14,
+            padding: '2px 4px',
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          {isPlaying ? '\u23F8' : '\u25B6'}
+        </button>
+        <button
+          onClick={stepForward}
+          aria-label="Step forward"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontSize: 14,
+            padding: '2px 4px',
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          &#8250;
+        </button>
       </div>
     </div>
   );

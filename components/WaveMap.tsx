@@ -82,29 +82,25 @@ function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
 // Layer Configurations
 // =============================================================================
 
-const LAYER_CONFIGS: Record<MapLayer, {
-  legendTitle: string;
-  legendGradient: string;
-  legendLabels: string[];
-  mobileLegendLabels: string[];
+const LEGEND_CONFIG: Record<MapLayer, {
+  unit: string;
+  gradient: string;
+  labels: string[];
 }> = {
   waveHeight: {
-    legendTitle: 'Wave Height',
-    legendGradient: 'linear-gradient(to top, #B4AFA8 0%, #6E9BD2 10%, #4682C4 20%, #3A6BB4 35%, #2D56A0 55%, #1F3F8C 75%, #0F2364 100%)',
-    legendLabels: ['0m', '3m', '6m', '9m', '12m', '15m+'],
-    mobileLegendLabels: ['0m', '5m', '10m', '15m+'],
+    unit: 'm',
+    gradient: 'linear-gradient(to bottom, rgb(220,30,30), rgb(240,140,30), rgb(200,220,50), rgb(0,200,100), rgb(0,180,220), rgb(0,120,200), rgb(30,60,180))',
+    labels: ['15', '12', '9', '6', '3', '0'],
   },
   wavePeriod: {
-    legendTitle: 'Wave Period',
-    legendGradient: 'linear-gradient(to top, #B4AFA8, #968CC3, #5F41A5, #41288C)',
-    legendLabels: ['0s', '5s', '10s', '15s', '20s', '25s+'],
-    mobileLegendLabels: ['0s', '10s', '25s+'],
+    unit: 's',
+    gradient: 'linear-gradient(to bottom, rgb(140,40,180), rgb(180,100,200), rgb(80,200,80), rgb(0,180,120), rgb(0,140,200), rgb(40,60,180))',
+    labels: ['25', '20', '15', '10', '5', '0'],
   },
   wind: {
-    legendTitle: 'Wind Speed',
-    legendGradient: 'linear-gradient(to top, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
-    legendLabels: ['0', '5', '10', '15', '20', '25+'],
-    mobileLegendLabels: ['0', '10', '25+'],
+    unit: 'm/s',
+    gradient: 'linear-gradient(to bottom, rgb(200,30,30), rgb(240,100,30), rgb(220,180,30), rgb(160,210,50), rgb(40,190,80), rgb(60,160,120), rgb(100,120,140))',
+    labels: ['30', '25', '20', '15', '10', '5', '0'],
   },
 };
 
@@ -936,33 +932,65 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         </div>
       )}
 
-      {/* Vertical Legend — bottom-right, above TimeSlider */}
+      {/* Legend — dark glass vertical strip */}
       <div
         data-testid="legend"
-        className="absolute z-20 bottom-[110px] flex items-end gap-1.5"
-        style={{ right: 16 }}
+        style={{
+          position: 'absolute',
+          bottom: 80,
+          right: 12,
+          zIndex: 10,
+          background: 'rgba(30, 30, 25, 0.55)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderRadius: 6,
+          padding: '8px 6px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+          fontFamily: 'Inter, system-ui, sans-serif',
+        }}
       >
-        {/* Labels — float to the left of the card */}
-        <div className="relative shrink-0 mb-1" style={{ height: isMobile ? 100 : 140 }}>
-          {(isMobile ? LAYER_CONFIGS[activeLayer].mobileLegendLabels : LAYER_CONFIGS[activeLayer].legendLabels).map((label, i, arr) => (
-            <span
-              key={label}
-              className="absolute right-0 text-[10px] text-text-primary/70 tabular-nums leading-none whitespace-nowrap drop-shadow-sm"
-              style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-        {/* Card — matches zoom control styling */}
-        <div className="w-9 bg-surface rounded-md shadow-sm border border-border flex flex-col items-center py-2 gap-1.5">
-          <span className="text-[10px] font-medium text-text-secondary leading-tight text-center">
-            {LAYER_CONFIGS[activeLayer].legendTitle}
-          </span>
+        <span style={{
+          fontSize: 9,
+          color: 'rgba(255,255,255,0.7)',
+          fontWeight: 500,
+          letterSpacing: '0.05em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {LEGEND_CONFIG[activeLayer].unit}
+        </span>
+        <div style={{ display: 'flex', gap: 3 }}>
           <div
-            className="w-1.5 rounded-sm"
-            style={{ height: isMobile ? 100 : 140, background: LAYER_CONFIGS[activeLayer].legendGradient }}
+            role="img"
+            aria-label={`Color scale for ${activeLayer}`}
+            style={{
+              width: 14,
+              height: 140,
+              borderRadius: 3,
+              background: LEGEND_CONFIG[activeLayer].gradient,
+              flexShrink: 0,
+            }}
           />
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            height: 140,
+            padding: '1px 0',
+          }}>
+            {LEGEND_CONFIG[activeLayer].labels.map((label, i) => (
+              <span key={i} style={{
+                fontSize: 9,
+                color: 'rgba(255,255,255,0.6)',
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1,
+              }}>
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -971,6 +999,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         currentHour={currentHour}
         validTime={metadata?.valid_time ?? null}
         referenceTime={metadata?.model_run ?? null}
+        activeLayer={activeLayer}
         isLoading={isLoading}
         onChange={handleHourChange}
       />
