@@ -138,7 +138,7 @@ def generate_contours(clipped_tif: str, temp_dir: str) -> list[str]:
 
         # GEBCO elevation is negative for ocean. Pass negative levels to
         # gdal_contour so it traces lines at the correct ocean depths.
-        negative_levels = [str(-level) for level in tier["levels"]]
+        negative_levels = [str(v) for v in sorted(-level for level in tier["levels"])]
 
         run([
             "gdal_contour",
