@@ -8,12 +8,11 @@ import SearchBar from './SearchBar';
 import SpotPanel from './SpotPanel';
 import VectorOverlay from './VectorOverlay';
 import { MapLayer } from './LayerToggle';
-import DeckGLOverlay from './DeckGLOverlay';
 import Toggle from './ui/Toggle';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
 import { Plus, Minus, AlertTriangle, AlertCircle, Layers, Waves, Timer, Wind } from 'lucide-react';
-import { DATA_URLS } from '@/lib/config';
+import { DATA_URLS, SUPABASE_STORAGE_URL } from '@/lib/config';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   SwellData,
@@ -48,6 +47,26 @@ const POPUP_STYLES = {
 // Buoy marker colors
 const BUOY_FILL = '#FEFDFB';
 const BUOY_STROKE = '#3D3630';
+
+// Map layer names to PNG filename prefixes (matches pipeline output)
+const LAYER_TO_FILENAME: Record<MapLayer, string> = {
+  waveHeight: 'wave-height',
+  wavePeriod: 'wave-period',
+  wind: 'wind-speed',
+};
+
+function getRasterUrl(layer: MapLayer, hour: number): string {
+  const paddedHour = String(hour).padStart(3, '0');
+  return `${SUPABASE_STORAGE_URL}/${LAYER_TO_FILENAME[layer]}-f${paddedHour}.png`;
+}
+
+// Mercator bounds matching the pipeline output
+const RASTER_BOUNDS: [[number, number], [number, number], [number, number], [number, number]] = [
+  [-180, 85.051129],   // top-left
+  [180, 85.051129],    // top-right
+  [180, -85.051129],   // bottom-right
+  [-180, -85.051129],  // bottom-left
+];
 
 const WATER_COLORS: Record<MapLayer, string> = {
   waveHeight: '#C8D8E4',  // soft warm-desaturated blue
@@ -509,6 +528,14 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     }
   }, [activeLayer]);
 
+  // Update forecast raster when hour or active layer changes
+  useEffect(() => {
+    if (!map.current) return;
+    const source = map.current.getSource('forecast-raster') as maplibregl.ImageSource | undefined;
+    if (!source) return;
+    source.updateImage({ url: getRasterUrl(activeLayer, currentHour) });
+  }, [currentHour, activeLayer]);
+
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -609,6 +636,63 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
 
     map.current.on('load', async () => {
       if (!map.current || !popup.current) return;
+      const m = map.current;
+
+      // --- Forecast raster + vector masking layers ---
+      // Find insertion point: first road/tunnel/building layer
+      const baseStyle = m.getStyle();
+      let insertBefore: string | undefined;
+      if (baseStyle?.layers) {
+        for (const layer of baseStyle.layers) {
+          if (
+            layer.id.includes('tunnel') ||
+            layer.id.includes('road') ||
+            layer.id.includes('aeroway') ||
+            layer.id.includes('bridge') ||
+            layer.id.includes('building')
+          ) {
+            insertBefore = layer.id;
+            break;
+          }
+        }
+      }
+
+      // Forecast raster (renders everywhere — frontend masks land)
+      m.addSource('forecast-raster', {
+        type: 'image',
+        url: getRasterUrl('waveHeight', 0),
+        coordinates: RASTER_BOUNDS,
+      });
+      m.addLayer({
+        id: 'forecast-layer',
+        type: 'raster',
+        source: 'forecast-raster',
+        paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 },
+      }, insertBefore);
+
+      // Land mask — NE 50m land polygons, covers raster over land
+      m.addSource('land-mask', {
+        type: 'geojson',
+        data: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_land.geojson',
+      });
+      m.addLayer({
+        id: 'land-mask-layer',
+        type: 'fill',
+        source: 'land-mask',
+        paint: { 'fill-color': '#F0EBE3', 'fill-opacity': 1 },
+      }, insertBefore);
+
+      // Inland water — NE 50m lakes, renders above land mask
+      m.addSource('inland-water', {
+        type: 'geojson',
+        data: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_lakes.geojson',
+      });
+      m.addLayer({
+        id: 'inland-water-layer',
+        type: 'fill',
+        source: 'inland-water',
+        paint: { 'fill-color': '#D8E0E4', 'fill-opacity': 1 },
+      }, insertBefore);
 
       try {
         // Parallel fetch both data sources from Supabase Storage (Issue #17)
@@ -773,14 +857,6 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} data-testid="map-container" style={{ width: '100%', height: '100%' }} />
-
-      {/* Deck.gl Raster Overlay */}
-      <DeckGLOverlay
-        map={map.current}
-        forecastHour={currentHour}
-        activeLayer={activeLayer}
-        opacity={0.8}
-      />
 
       {/* Search Bar + Layers Button */}
       <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
