@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import NavBar, { View } from '@/components/NavBar';
 import WaveMap from '@/components/WaveMap';
 import LayersPanel from '@/components/LayersPanel';
+import FavoritesPage from '@/components/FavoritesPage';
 import SettingsPlaceholder from '@/components/SettingsPlaceholder';
-import IconButton from '@/components/ui/IconButton';
 import { MapLayer } from '@/components/LayerToggle';
 import { getFavorites } from '@/lib/favorites';
 
@@ -59,6 +58,7 @@ export default function HomePage() {
           initialSpot={initialSpot}
           activeLayer={activeLayer}
           showBuoys={showBuoys}
+          onSpotSelect={() => { if (activeView !== 'map') setActiveView('map'); }}
         />
 
         {/* Overlay panels */}
@@ -72,42 +72,16 @@ export default function HomePage() {
           />
         )}
         {activeView === 'favorites' && (
-          <FavoritesPlaceholder onClose={() => setActiveView('map')} />
+          <FavoritesPage
+            onViewSpot={handleViewSpot}
+            onFavoritesChange={refreshFavoritesCount}
+            onClose={() => setActiveView('map')}
+          />
         )}
         {activeView === 'settings' && (
           <SettingsPlaceholder />
         )}
       </div>
     </>
-  );
-}
-
-function FavoritesPlaceholder({ onClose }: { onClose: () => void }) {
-  const isMobile = useIsMobile();
-
-  if (isMobile) {
-    return (
-      <div className="fixed bottom-16 left-0 right-0 bg-surface rounded-t-lg shadow-md border-t border-border z-30 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-medium text-text-primary">Favorites</h2>
-          <IconButton aria-label="Close" onClick={onClose}>
-            <X className="h-4 w-4" strokeWidth={1.5} />
-          </IconButton>
-        </div>
-        <p className="text-sm text-text-secondary">Favorites panel coming next</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="absolute top-0 left-0 bottom-0 w-[300px] bg-surface border-r border-border shadow-md z-30 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-text-primary">Favorites</h2>
-        <IconButton aria-label="Close" onClick={onClose}>
-          <X className="h-4 w-4" strokeWidth={1.5} />
-        </IconButton>
-      </div>
-      <p className="text-sm text-text-secondary">Favorites panel coming next</p>
-    </div>
   );
 }

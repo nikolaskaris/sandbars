@@ -84,7 +84,7 @@ export default function LayersPanel({
     return (
       <div
         data-testid="layers-panel"
-        className="fixed bottom-16 left-0 right-0 bg-surface rounded-t-lg shadow-md border-t border-border z-30"
+        className="fixed bottom-16 left-0 right-0 bg-surface rounded-t-lg shadow-md border-t border-border z-30 animate-slide-in-up"
       >
         {content}
       </div>
@@ -94,7 +94,7 @@ export default function LayersPanel({
   return (
     <div
       data-testid="layers-panel"
-      className="absolute top-0 left-0 bottom-0 w-[300px] bg-surface border-r border-border shadow-md z-30"
+      className="absolute top-0 left-0 bottom-0 w-[300px] bg-surface border-r border-border shadow-md z-30 animate-slide-in-left"
     >
       {content}
     </div>

@@ -183,9 +183,19 @@ export default {
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },
+        'slide-in-left': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'slide-in-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
       },
       animation: {
         shimmer: 'shimmer 1.5s ease-in-out infinite',
+        'slide-in-left': 'slide-in-left 200ms ease-out',
+        'slide-in-up': 'slide-in-up 200ms ease-out',
       },
 
       // -----------------------------------------------------------------------

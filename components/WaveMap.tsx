@@ -306,9 +306,10 @@ interface WaveMapProps {
   initialSpot?: { lat: number; lng: number; name: string } | null;
   activeLayer: MapLayer;
   showBuoys: boolean;
+  onSpotSelect?: () => void;
 }
 
-export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys }: WaveMapProps) {
+export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys, onSpotSelect }: WaveMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
@@ -339,6 +340,11 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const selectedSpotRef = useRef(selectedSpot);
   useEffect(() => { selectedSpotRef.current = selectedSpot; }, [selectedSpot]);
+
+  // Notify parent when a spot is selected (so it can close overlay panels)
+  useEffect(() => {
+    if (selectedSpot) onSpotSelect?.();
+  }, [selectedSpot, onSpotSelect]);
 
   // Track previous map view to restore on spot close
   const [previousView, setPreviousView] = useState<{ center: [number, number]; zoom: number } | null>(null);
