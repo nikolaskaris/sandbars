@@ -7,7 +7,7 @@ test.describe('Smoke Tests - UI Elements', () => {
     // Check that basic UI elements are rendered
     await expect(page.locator('[data-testid="legend"]')).toBeVisible();
     await expect(page.locator('[data-testid="time-slider"]')).toBeVisible();
-    await expect(page.locator('[data-testid="layers-button"]')).toBeVisible();
+    await expect(page.locator('[data-testid="nav-layers"]')).toBeVisible();
   });
 
   test('legend contains wave height label', async ({ page }) => {
@@ -20,10 +20,10 @@ test.describe('Smoke Tests - UI Elements', () => {
   test('buoy toggle shows NDBC label', async ({ page }) => {
     await page.goto('/', { waitUntil: 'load' });
 
-    // Retry click+verify to handle React hydration timing
+    // Click Layers in the sidebar/tab bar to open the layers panel
     await expect(async () => {
-      await page.locator('[data-testid="layers-button"]').click();
-      await expect(page.locator('[data-testid="layer-modal"]')).toBeVisible();
+      await page.locator('[data-testid="nav-layers"]').click();
+      await expect(page.locator('[data-testid="layers-panel"]')).toBeVisible();
     }).toPass({ timeout: 10000 });
 
     const toggle = page.locator('[data-testid="buoy-toggle"]');

@@ -8,10 +8,8 @@ import SearchBar from './SearchBar';
 import SpotPanel from './SpotPanel';
 import VectorOverlay from './VectorOverlay';
 import { MapLayer } from './LayerToggle';
-import Toggle from './ui/Toggle';
 import Button from './ui/Button';
-import IconButton from './ui/IconButton';
-import { Plus, Minus, AlertTriangle, AlertCircle, Layers, Waves, Timer, Wind } from 'lucide-react';
+import { Plus, Minus, AlertTriangle, AlertCircle } from 'lucide-react';
 import { DATA_URLS, SUPABASE_STORAGE_URL } from '@/lib/config';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
@@ -306,9 +304,11 @@ function formatCoordinateLabel(lat: number, lng: number): string {
 interface WaveMapProps {
   onFavoritesChange?: () => void;
   initialSpot?: { lat: number; lng: number; name: string } | null;
+  activeLayer: MapLayer;
+  showBuoys: boolean;
 }
 
-export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps = {}) {
+export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys }: WaveMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
@@ -324,12 +324,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
   const [currentData, setCurrentData] = useState<GeoJSONData | null>(null);
   const [waveError, setWaveError] = useState<string | null>(null);
 
-  // Active data layer
-  const [activeLayer, setActiveLayer] = useState<MapLayer>('waveHeight');
-
-  // Layer visibility
-  const [showBuoys, setShowBuoys] = useState(true);
-  const [showLayerModal, setShowLayerModal] = useState(false);
+  // (activeLayer and showBuoys are now controlled via props)
 
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
@@ -862,72 +857,9 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} data-testid="map-container" style={{ width: '100%', height: '100%' }} />
 
-      {/* Search Bar + Layers Button */}
-      <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+      {/* Search Bar */}
+      <div className="absolute top-3 left-3 z-10">
         <SearchBar onLocationSelect={handleLocationSelect} />
-        <div className="relative">
-          <IconButton
-            data-testid="layers-button"
-            aria-label="Layers"
-            active={showLayerModal}
-            onClick={() => setShowLayerModal(prev => !prev)}
-          >
-            <Layers className="h-4 w-4" strokeWidth={1.5} />
-          </IconButton>
-
-          {/* Layer Modal */}
-          {showLayerModal && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setShowLayerModal(false)} />
-              <div
-                data-testid="layer-modal"
-                className="absolute top-[calc(100%+8px)] left-0 bg-surface rounded-md shadow-md border border-border p-3 z-30 w-[200px]"
-              >
-                {/* Data Layer section */}
-                <div className="text-xs font-medium text-text-tertiary mb-2">Data Layer</div>
-                <div className="flex flex-col gap-0.5 mb-3">
-                  {([
-                    { id: 'waveHeight' as MapLayer, label: 'Wave Height', icon: Waves },
-                    { id: 'wavePeriod' as MapLayer, label: 'Wave Period', icon: Timer },
-                    { id: 'wind' as MapLayer, label: 'Wind Speed', icon: Wind },
-                  ]).map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      data-testid={`layer-${id}`}
-                      onClick={() => setActiveLayer(id)}
-                      className={[
-                        'flex items-center gap-2 px-2.5 py-2 rounded text-sm w-full text-left transition-colors duration-100 min-h-[36px]',
-                        activeLayer === id
-                          ? 'bg-accent-muted text-accent font-medium'
-                          : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary',
-                      ].join(' ')}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Overlays section */}
-                <div className="border-t border-border pt-2.5">
-                  <div className="text-xs font-medium text-text-tertiary mb-2">Overlays</div>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5" data-testid="buoy-toggle">
-                    <Toggle
-                      checked={showBuoys && !buoyError}
-                      onChange={(checked) => setShowBuoys(checked)}
-                      size="sm"
-                      disabled={!!buoyError}
-                    />
-                    <div className={`w-2.5 h-2.5 rounded-full ${buoyError ? 'bg-error border-error' : 'bg-surface border-text-primary'} border-[1.5px]`} />
-                    <span className={`text-sm ${buoyError ? 'text-error' : 'text-text-secondary'}`}>
-                      {buoyError ? 'Buoys unavailable' : 'NDBC Buoys'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Zoom Controls */}
