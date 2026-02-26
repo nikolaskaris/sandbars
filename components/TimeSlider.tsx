@@ -19,15 +19,9 @@ const LAYER_LABELS: Record<MapLayer, string> = {
   wind: 'Wind Speed',
 };
 
-/**
- * Compute block metadata for each forecast hour:
- * - isNight: local hour is 21-23 or 0-5
- * - isDayBoundary: local hour crosses midnight (new calendar day)
- * - dayLabel: "Thu", "Fri", etc. for the first block of a new day
- */
+/** Compute metadata for each forecast hour */
 function computeBlockMeta(referenceTime: string | null) {
   if (!referenceTime) return [];
-
   const refDate = new Date(referenceTime);
 
   return FORECAST_HOURS.map((fh, i) => {
@@ -35,7 +29,6 @@ function computeBlockMeta(referenceTime: string | null) {
     const localHour = blockDate.getHours();
     const isNight = localHour >= 21 || localHour <= 5;
 
-    // Day boundary: check if this block starts a new calendar day vs previous block
     let isDayBoundary = false;
     if (i === 0) {
       isDayBoundary = true;
@@ -45,14 +38,11 @@ function computeBlockMeta(referenceTime: string | null) {
     }
 
     const dayLabel = blockDate.toLocaleDateString('en-US', { weekday: 'short' });
-
     return { isNight, isDayBoundary, dayLabel, date: blockDate };
   });
 }
 
-/**
- * Format time for the pill: "10am Thu" or "3pm Sat"
- */
+/** Format time for the pill: "10am Thu" */
 function formatTimePill(isoString: string): string {
   const date = new Date(isoString);
   const hour = date.getHours();
@@ -62,14 +52,76 @@ function formatTimePill(isoString: string): string {
   return `${h}${ampm} ${day}`;
 }
 
-/**
- * Compute day label positions (index of first block in each new day)
- */
-function computeDayLabels(blockMeta: ReturnType<typeof computeBlockMeta>) {
-  const labels: { index: number; label: string }[] = [];
-  for (let i = 0; i < blockMeta.length; i++) {
-    if (blockMeta[i].isDayBoundary) {
-      labels.push({ index: i, label: blockMeta[i].dayLabel });
+interface DisplayBlock {
+  startIndex: number;
+  endIndex: number;
+  firstHour: number;
+  isNight: boolean;
+  isActive: boolean;
+  isDayBoundary: boolean;
+}
+
+/** Group forecast hours into display blocks based on available width */
+function computeDisplayBlocks(
+  blockMeta: ReturnType<typeof computeBlockMeta>,
+  currentIndex: number,
+  containerWidth: number,
+): DisplayBlock[] {
+  const MIN_BLOCK_WIDTH = 6;
+  const GAP = 1;
+  const total = FORECAST_HOURS.length;
+
+  // If no width yet or plenty of room, show all blocks
+  const maxBlocks = containerWidth > 0
+    ? Math.floor(containerWidth / (MIN_BLOCK_WIDTH + GAP))
+    : total;
+  const groupSize = Math.max(1, Math.ceil(total / Math.max(1, maxBlocks)));
+
+  const blocks: DisplayBlock[] = [];
+  for (let i = 0; i < total; i += groupSize) {
+    const end = Math.min(i + groupSize - 1, total - 1);
+    const firstMeta = blockMeta[i];
+
+    // Check if any block in this group is a day boundary (excluding first group)
+    let isDayBoundary = false;
+    for (let j = i; j <= end; j++) {
+      if (blockMeta[j]?.isDayBoundary && j > 0) {
+        isDayBoundary = true;
+        break;
+      }
+    }
+    // First group always gets day boundary for label positioning
+    if (i === 0) isDayBoundary = true;
+
+    // Active if the current index falls within this group
+    const isActive = currentIndex >= i && currentIndex <= end;
+
+    blocks.push({
+      startIndex: i,
+      endIndex: end,
+      firstHour: FORECAST_HOURS[i],
+      isNight: firstMeta?.isNight ?? false,
+      isActive,
+      isDayBoundary,
+    });
+  }
+  return blocks;
+}
+
+/** Compute day labels from display blocks */
+function computeDayLabels(
+  blockMeta: ReturnType<typeof computeBlockMeta>,
+  displayBlocks: DisplayBlock[],
+) {
+  const labels: { blockIndex: number; label: string }[] = [];
+  for (let bi = 0; bi < displayBlocks.length; bi++) {
+    const db = displayBlocks[bi];
+    // Find first day boundary in this display block
+    for (let i = db.startIndex; i <= db.endIndex; i++) {
+      if (blockMeta[i]?.isDayBoundary) {
+        labels.push({ blockIndex: bi, label: blockMeta[i].dayLabel });
+        break;
+      }
     }
   }
   // Show every day for first ~4 days, then every other day
@@ -88,8 +140,8 @@ export default function TimeSlider({
   onChange,
 }: TimeSliderProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const currentIndex = useMemo(
     () => FORECAST_HOURS.indexOf(currentHour),
@@ -101,15 +153,29 @@ export default function TimeSlider({
     [referenceTime]
   );
 
+  // Measure container width for adaptive grouping
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const displayBlocks = useMemo(
+    () => computeDisplayBlocks(blockMeta, currentIndex, containerWidth),
+    [blockMeta, currentIndex, containerWidth]
+  );
+
   const dayLabels = useMemo(
-    () => computeDayLabels(blockMeta),
-    [blockMeta]
+    () => computeDayLabels(blockMeta, displayBlocks),
+    [blockMeta, displayBlocks]
   );
 
   const timePillText = validTime ? formatTimePill(validTime) : '\u2014';
-  const totalBlocks = FORECAST_HOURS.length;
 
-  // Play animation: use ref to access latest currentIndex inside interval
+  // Play animation
   const currentIndexRef = useRef(currentIndex);
   currentIndexRef.current = currentIndex;
 
@@ -123,7 +189,6 @@ export default function TimeSlider({
       }
       onChange(FORECAST_HOURS[next]);
     }, 500);
-    playIntervalRef.current = interval;
     return () => clearInterval(interval);
   }, [isPlaying, onChange]);
 
@@ -137,15 +202,17 @@ export default function TimeSlider({
     onChange(FORECAST_HOURS[next]);
   }, [currentIndex, onChange]);
 
-  // Keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') { e.preventDefault(); stepBack(); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); stepForward(); }
     else if (e.key === ' ') { e.preventDefault(); setIsPlaying(p => !p); }
   }, [stepBack, stepForward]);
 
-  // Pill position: percentage based on active block index
-  const pillLeft = totalBlocks > 0 ? (currentIndex / (totalBlocks - 1)) * 100 : 0;
+  // Pill position based on display block index
+  const activeBlockIndex = displayBlocks.findIndex(b => b.isActive);
+  const pillLeft = displayBlocks.length > 1 && activeBlockIndex >= 0
+    ? (activeBlockIndex / (displayBlocks.length - 1)) * 100
+    : 50;
 
   return (
     <div
@@ -180,12 +247,8 @@ export default function TimeSlider({
         aria-hidden="true"
       />
 
-      {/* Time Pill — floating above active block */}
-      <div style={{
-        position: 'relative',
-        height: 24,
-        marginBottom: 4,
-      }}>
+      {/* Time Pill */}
+      <div style={{ position: 'relative', height: 24, marginBottom: 4 }}>
         <div
           data-testid="forecast-time-label"
           style={{
@@ -213,35 +276,24 @@ export default function TimeSlider({
           }}>
             {timePillText}
           </span>
-          <span style={{
-            fontSize: 11,
-            color: 'rgba(255, 255, 255, 0.45)',
-          }}>
+          <span style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.45)' }}>
             &middot;
           </span>
-          <span style={{
-            fontSize: 11,
-            fontWeight: 500,
-            color: '#C17F5E',
-          }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: '#C17F5E' }}>
             {LAYER_LABELS[activeLayer]}
           </span>
         </div>
       </div>
 
-      {/* Day Labels — above block grid */}
-      <div style={{
-        position: 'relative',
-        height: 14,
-        marginBottom: 2,
-      }}>
+      {/* Day Labels */}
+      <div style={{ position: 'relative', height: 14, marginBottom: 2 }}>
         {dayLabels.map((dl) => (
           dl.visible && (
             <span
-              key={dl.index}
+              key={dl.blockIndex}
               style={{
                 position: 'absolute',
-                left: `${(dl.index / (totalBlocks - 1)) * 100}%`,
+                left: `${displayBlocks.length > 1 ? (dl.blockIndex / (displayBlocks.length - 1)) * 100 : 0}%`,
                 fontSize: 10,
                 fontWeight: 500,
                 color: 'rgba(255, 255, 255, 0.5)',
@@ -267,14 +319,11 @@ export default function TimeSlider({
           cursor: 'pointer',
         }}
       >
-        {FORECAST_HOURS.map((fh, i) => {
-          const meta = blockMeta[i];
-          const isActive = i === currentIndex;
-
+        {displayBlocks.map((block, i) => {
           let bgColor: string;
-          if (isActive) {
+          if (block.isActive) {
             bgColor = '#C17F5E';
-          } else if (meta?.isNight) {
+          } else if (block.isNight) {
             bgColor = 'rgba(30, 30, 25, 0.5)';
           } else {
             bgColor = 'rgba(255, 255, 255, 0.18)';
@@ -282,14 +331,15 @@ export default function TimeSlider({
 
           return (
             <div
-              key={fh}
-              onClick={() => onChange(fh)}
-              aria-current={isActive ? 'true' : undefined}
+              key={block.startIndex}
+              onClick={() => onChange(block.firstHour)}
+              aria-current={block.isActive ? 'true' : undefined}
               style={{
                 flex: 1,
+                minWidth: 0,
                 height: 22,
                 background: bgColor,
-                borderLeft: meta?.isDayBoundary && i > 0
+                borderLeft: block.isDayBoundary && i > 0
                   ? '1px solid rgba(255, 255, 255, 0.25)'
                   : 'none',
                 transition: 'background 0.08s ease',
@@ -300,11 +350,7 @@ export default function TimeSlider({
       </div>
 
       {/* Controls Row */}
-      <div style={{
-        display: 'flex',
-        gap: 2,
-        marginTop: 6,
-      }}>
+      <div style={{ display: 'flex', gap: 2, marginTop: 6 }}>
         <button
           onClick={stepBack}
           aria-label="Step back"
