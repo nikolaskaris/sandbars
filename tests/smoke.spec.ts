@@ -90,7 +90,8 @@ test.describe('Smoke Tests - UI Elements', () => {
     expect(windBg).not.toEqual(periodBg);
   });
 
-  test('slider has 105 blocks and day-labels container', async ({ page }) => {
+  test('slider blocks remain full count on desktop', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const blocks = page.locator('[data-testid="slider-blocks"] > div');
@@ -98,6 +99,35 @@ test.describe('Smoke Tests - UI Elements', () => {
 
     const dayLabelsContainer = page.locator('[data-testid="day-labels"]');
     await expect(dayLabelsContainer).toBeVisible();
+  });
+
+  test('slider blocks adapt to narrow viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    // Wait for ResizeObserver to fire and trigger adaptive grouping
+    const container = page.locator('[data-testid="slider-blocks"]');
+    await expect(async () => {
+      const count = await container.locator('> div').count();
+      expect(count).toBeLessThan(105);
+      expect(count).toBeGreaterThanOrEqual(20);
+    }).toPass({ timeout: 5000 });
+  });
+
+  test('slider interaction works on narrow viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const blocks = page.locator('[data-testid="slider-blocks"] > div');
+    const pill = page.locator('[data-testid="forecast-time-label"]');
+    await expect(pill).toBeVisible();
+
+    // Click the 5th block to change time
+    await blocks.nth(4).click();
+    const text = await pill.textContent();
+    // Pill should have some content (not empty)
+    expect(text).toBeTruthy();
+    expect(text!.length).toBeGreaterThan(0);
   });
 
   test('legend labels update per layer', async ({ page }) => {

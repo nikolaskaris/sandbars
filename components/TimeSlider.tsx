@@ -52,31 +52,86 @@ function formatTimePill(isoString: string): string {
   return `${h}${ampm} ${day}`;
 }
 
-interface DisplayBlock {
+/** Per-forecast-hour metadata with flex weight */
+interface BlockInfo {
   index: number;
   hour: number;
-  duration: number; // 3 or 6
+  flexWeight: number; // 1 for 3hr, 2 for 6hr
   isNight: boolean;
-  isActive: boolean;
   isDayBoundary: boolean;
 }
 
-/** Build display blocks — one per forecast hour, with duration for flex weight */
-function computeDisplayBlocks(
+/** Build block info — one per forecast hour */
+function computeBlockInfo(
   blockMeta: ReturnType<typeof computeBlockMeta>,
-  currentIndex: number,
-): DisplayBlock[] {
+): BlockInfo[] {
   return FORECAST_HOURS.map((hour, i) => {
-    const duration = i === 0 ? 3 : hour - FORECAST_HOURS[i - 1]; // 3 or 6
+    const duration = i === 0 ? 3 : hour - FORECAST_HOURS[i - 1];
     return {
       index: i,
       hour,
-      duration,
+      flexWeight: duration / 3, // 3hr → 1, 6hr → 2
       isNight: blockMeta[i]?.isNight ?? false,
-      isActive: i === currentIndex,
       isDayBoundary: blockMeta[i]?.isDayBoundary ?? false,
     };
   });
+}
+
+interface DisplayBlock {
+  hour: number;           // first hour in the group (used for onClick)
+  flexWeight: number;     // sum of constituent flex weights
+  isNight: boolean;       // from first block in group
+  isDayBoundary: boolean; // from first block in group
+  indices: number[];      // which FORECAST_HOURS indices this group covers
+}
+
+/** Group blocks adaptively based on container width */
+function computeDisplayBlocks(
+  blocks: BlockInfo[],
+  containerWidth: number,
+): DisplayBlock[] {
+  if (blocks.length === 0) return [];
+
+  const totalFlex = blocks.reduce((s, b) => s + b.flexWeight, 0);
+  const pxPerFlex = containerWidth / totalFlex;
+  const MIN_BLOCK_PX = 6;
+
+  // If smallest block (flex 1) is wide enough, no grouping needed
+  if (pxPerFlex >= MIN_BLOCK_PX) {
+    return blocks.map(b => ({
+      hour: b.hour,
+      flexWeight: b.flexWeight,
+      isNight: b.isNight,
+      isDayBoundary: b.isDayBoundary,
+      indices: [b.index],
+    }));
+  }
+
+  // Target flex per group so each group is at least 8px wide
+  const TARGET_PX = 8;
+  const targetFlex = Math.ceil(TARGET_PX / pxPerFlex);
+
+  const groups: DisplayBlock[] = [];
+  let current: DisplayBlock | null = null;
+
+  for (const b of blocks) {
+    if (!current || current.flexWeight >= targetFlex) {
+      if (current) groups.push(current);
+      current = {
+        hour: b.hour,
+        flexWeight: b.flexWeight,
+        isNight: b.isNight,
+        isDayBoundary: b.isDayBoundary,
+        indices: [b.index],
+      };
+    } else {
+      current.flexWeight += b.flexWeight;
+      current.indices.push(b.index);
+    }
+  }
+  if (current) groups.push(current);
+
+  return groups;
 }
 
 /** Compute time-based percentage for positioning */
@@ -112,6 +167,9 @@ export default function TimeSlider({
   onChange,
 }: TimeSliderProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(800);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const currentIndex = useMemo(
     () => FORECAST_HOURS.indexOf(currentHour),
     [currentHour]
@@ -122,9 +180,24 @@ export default function TimeSlider({
     [referenceTime]
   );
 
+  const blockInfo = useMemo(
+    () => computeBlockInfo(blockMeta),
+    [blockMeta]
+  );
+
+  // Measure container width for adaptive grouping
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const displayBlocks = useMemo(
-    () => computeDisplayBlocks(blockMeta, currentIndex),
-    [blockMeta, currentIndex]
+    () => computeDisplayBlocks(blockInfo, containerWidth),
+    [blockInfo, containerWidth]
   );
 
   const dayLabels = useMemo(
@@ -264,6 +337,7 @@ export default function TimeSlider({
 
       {/* Block Grid */}
       <div
+        ref={containerRef}
         data-testid="slider-blocks"
         style={{
           display: 'flex',
@@ -274,8 +348,9 @@ export default function TimeSlider({
         }}
       >
         {displayBlocks.map((block, i) => {
+          const isActive = block.indices.includes(currentIndex);
           let bgColor: string;
-          if (block.isActive) {
+          if (isActive) {
             bgColor = '#C17F5E';
           } else if (block.isNight) {
             bgColor = 'rgba(30, 30, 25, 0.5)';
@@ -287,9 +362,9 @@ export default function TimeSlider({
             <div
               key={block.hour}
               onClick={() => onChange(block.hour)}
-              aria-current={block.isActive ? 'true' : undefined}
+              aria-current={isActive ? 'true' : undefined}
               style={{
-                flex: block.duration / 3, // 3hr → 1, 6hr → 2
+                flex: block.flexWeight,
                 minWidth: 0,
                 height: 22,
                 background: bgColor,
