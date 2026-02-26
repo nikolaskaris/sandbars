@@ -90,6 +90,16 @@ test.describe('Smoke Tests - UI Elements', () => {
     expect(windBg).not.toEqual(periodBg);
   });
 
+  test('slider has 105 blocks and day-labels container', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const blocks = page.locator('[data-testid="slider-blocks"] > div');
+    await expect(blocks).toHaveCount(105);
+
+    const dayLabelsContainer = page.locator('[data-testid="day-labels"]');
+    await expect(dayLabelsContainer).toBeVisible();
+  });
+
   test('legend labels update per layer', async ({ page }) => {
     await page.goto('/', { waitUntil: 'load' });
 
@@ -137,6 +147,16 @@ test.describe('Smoke Tests - Map & Data (requires WebGL)', () => {
 
     expect(response.status()).toBe(200);
     expect(response.url()).toContain('supabase.co');
+  });
+
+  test('day labels appear for every forecast day', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    const dayLabels = page.locator('[data-testid="day-labels"] > span');
+    await expect(dayLabels.first()).toBeVisible({ timeout: 45000 });
+    const count = await dayLabels.count();
+    // 16-day forecast should have at least 14 day labels
+    expect(count).toBeGreaterThanOrEqual(14);
   });
 
   test('buoy data request is made to Supabase', async ({ page }) => {

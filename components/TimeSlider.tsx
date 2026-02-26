@@ -53,82 +53,54 @@ function formatTimePill(isoString: string): string {
 }
 
 interface DisplayBlock {
-  startIndex: number;
-  endIndex: number;
-  firstHour: number;
+  index: number;
+  hour: number;
+  duration: number; // 3 or 6
   isNight: boolean;
   isActive: boolean;
   isDayBoundary: boolean;
 }
 
-/** Group forecast hours into display blocks based on available width */
+/** Build display blocks — one per forecast hour, with duration for flex weight */
 function computeDisplayBlocks(
   blockMeta: ReturnType<typeof computeBlockMeta>,
   currentIndex: number,
-  containerWidth: number,
 ): DisplayBlock[] {
-  const MIN_BLOCK_WIDTH = 6;
-  const GAP = 1;
-  const total = FORECAST_HOURS.length;
-
-  // If no width yet or plenty of room, show all blocks
-  const maxBlocks = containerWidth > 0
-    ? Math.floor(containerWidth / (MIN_BLOCK_WIDTH + GAP))
-    : total;
-  const groupSize = Math.max(1, Math.ceil(total / Math.max(1, maxBlocks)));
-
-  const blocks: DisplayBlock[] = [];
-  for (let i = 0; i < total; i += groupSize) {
-    const end = Math.min(i + groupSize - 1, total - 1);
-    const firstMeta = blockMeta[i];
-
-    // Check if any block in this group is a day boundary (excluding first group)
-    let isDayBoundary = false;
-    for (let j = i; j <= end; j++) {
-      if (blockMeta[j]?.isDayBoundary && j > 0) {
-        isDayBoundary = true;
-        break;
-      }
-    }
-    // First group always gets day boundary for label positioning
-    if (i === 0) isDayBoundary = true;
-
-    // Active if the current index falls within this group
-    const isActive = currentIndex >= i && currentIndex <= end;
-
-    blocks.push({
-      startIndex: i,
-      endIndex: end,
-      firstHour: FORECAST_HOURS[i],
-      isNight: firstMeta?.isNight ?? false,
-      isActive,
-      isDayBoundary,
-    });
-  }
-  return blocks;
+  return FORECAST_HOURS.map((hour, i) => {
+    const duration = i === 0 ? 3 : hour - FORECAST_HOURS[i - 1]; // 3 or 6
+    return {
+      index: i,
+      hour,
+      duration,
+      isNight: blockMeta[i]?.isNight ?? false,
+      isActive: i === currentIndex,
+      isDayBoundary: blockMeta[i]?.isDayBoundary ?? false,
+    };
+  });
 }
 
-/** Compute day labels from display blocks */
+/** Compute time-based percentage for positioning */
+function timePercent(hour: number): number {
+  const first = FORECAST_HOURS[0];
+  const last = FORECAST_HOURS[FORECAST_HOURS.length - 1];
+  return ((hour - first) / (last - first)) * 100;
+}
+
+/** Compute day labels — show ALL days, positioned by time */
 function computeDayLabels(
   blockMeta: ReturnType<typeof computeBlockMeta>,
-  displayBlocks: DisplayBlock[],
 ) {
-  const labels: { blockIndex: number; label: string }[] = [];
-  for (let bi = 0; bi < displayBlocks.length; bi++) {
-    const db = displayBlocks[bi];
-    // Find first day boundary in this display block
-    for (let i = db.startIndex; i <= db.endIndex; i++) {
-      if (blockMeta[i]?.isDayBoundary) {
-        labels.push({ blockIndex: bi, label: blockMeta[i].dayLabel });
-        break;
-      }
+  const labels: { hour: number; label: string; percent: number }[] = [];
+  for (let i = 0; i < blockMeta.length; i++) {
+    if (blockMeta[i]?.isDayBoundary) {
+      labels.push({
+        hour: FORECAST_HOURS[i],
+        label: blockMeta[i].dayLabel,
+        percent: timePercent(FORECAST_HOURS[i]),
+      });
     }
   }
-  // Show every day for first ~4 days, then every other day
-  return labels.map((l, i) => ({
-    ...l,
-    visible: i < 4 || i % 2 === 0,
-  }));
+  return labels;
 }
 
 export default function TimeSlider({
@@ -140,9 +112,6 @@ export default function TimeSlider({
   onChange,
 }: TimeSliderProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-
   const currentIndex = useMemo(
     () => FORECAST_HOURS.indexOf(currentHour),
     [currentHour]
@@ -153,24 +122,14 @@ export default function TimeSlider({
     [referenceTime]
   );
 
-  // Measure container width for adaptive grouping
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver(entries => {
-      setContainerWidth(entries[0].contentRect.width);
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
   const displayBlocks = useMemo(
-    () => computeDisplayBlocks(blockMeta, currentIndex, containerWidth),
-    [blockMeta, currentIndex, containerWidth]
+    () => computeDisplayBlocks(blockMeta, currentIndex),
+    [blockMeta, currentIndex]
   );
 
   const dayLabels = useMemo(
-    () => computeDayLabels(blockMeta, displayBlocks),
-    [blockMeta, displayBlocks]
+    () => computeDayLabels(blockMeta),
+    [blockMeta]
   );
 
   const timePillText = validTime ? formatTimePill(validTime) : '\u2014';
@@ -208,11 +167,8 @@ export default function TimeSlider({
     else if (e.key === ' ') { e.preventDefault(); setIsPlaying(p => !p); }
   }, [stepBack, stepForward]);
 
-  // Pill position based on display block index
-  const activeBlockIndex = displayBlocks.findIndex(b => b.isActive);
-  const pillLeft = displayBlocks.length > 1 && activeBlockIndex >= 0
-    ? (activeBlockIndex / (displayBlocks.length - 1)) * 100
-    : 50;
+  // Pill position based on time percentage
+  const pillLeft = timePercent(currentHour);
 
   return (
     <div
@@ -286,31 +242,29 @@ export default function TimeSlider({
       </div>
 
       {/* Day Labels */}
-      <div style={{ position: 'relative', height: 14, marginBottom: 2 }}>
+      <div data-testid="day-labels" style={{ position: 'relative', height: 14, marginBottom: 2 }}>
         {dayLabels.map((dl) => (
-          dl.visible && (
-            <span
-              key={dl.blockIndex}
-              style={{
-                position: 'absolute',
-                left: `${displayBlocks.length > 1 ? (dl.blockIndex / (displayBlocks.length - 1)) * 100 : 0}%`,
-                fontSize: 10,
-                fontWeight: 500,
-                color: 'rgba(255, 255, 255, 0.5)',
-                textShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                whiteSpace: 'nowrap',
-                lineHeight: 1,
-              }}
-            >
-              {dl.label}
-            </span>
-          )
+          <span
+            key={dl.hour}
+            style={{
+              position: 'absolute',
+              left: `${dl.percent}%`,
+              fontSize: 10,
+              fontWeight: 500,
+              color: 'rgba(255, 255, 255, 0.5)',
+              textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+              whiteSpace: 'nowrap',
+              lineHeight: 1,
+            }}
+          >
+            {dl.label}
+          </span>
         ))}
       </div>
 
       {/* Block Grid */}
       <div
-        ref={containerRef}
+        data-testid="slider-blocks"
         style={{
           display: 'flex',
           gap: 1,
@@ -331,11 +285,11 @@ export default function TimeSlider({
 
           return (
             <div
-              key={block.startIndex}
-              onClick={() => onChange(block.firstHour)}
+              key={block.hour}
+              onClick={() => onChange(block.hour)}
               aria-current={block.isActive ? 'true' : undefined}
               style={{
-                flex: 1,
+                flex: block.duration / 3, // 3hr → 1, 6hr → 2
                 minWidth: 0,
                 height: 22,
                 background: bgColor,
