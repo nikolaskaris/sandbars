@@ -22,8 +22,10 @@ test.describe('Smoke Tests - UI Elements', () => {
 
     // Open layer modal first — buoy toggle is inside it
     await page.locator('[data-testid="layers-button"]').click();
+    // Wait for modal to render before checking toggle
+    await expect(page.locator('[data-testid="layer-modal"]')).toBeVisible({ timeout: 5000 });
     const toggle = page.locator('[data-testid="buoy-toggle"]');
-    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeVisible({ timeout: 5000 });
     await expect(toggle).toContainText('NDBC');
   });
 
