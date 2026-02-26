@@ -7,7 +7,7 @@ test.describe('Smoke Tests - UI Elements', () => {
     // Check that basic UI elements are rendered
     await expect(page.locator('[data-testid="legend"]')).toBeVisible();
     await expect(page.locator('[data-testid="time-slider"]')).toBeVisible();
-    await expect(page.locator('[data-testid="buoy-toggle"]')).toBeVisible();
+    await expect(page.locator('[data-testid="layers-button"]')).toBeVisible();
   });
 
   test('legend contains wave height label', async ({ page }) => {
@@ -20,7 +20,10 @@ test.describe('Smoke Tests - UI Elements', () => {
   test('buoy toggle shows NDBC label', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
+    // Open layer modal first — buoy toggle is inside it
+    await page.locator('[data-testid="layers-button"]').click();
     const toggle = page.locator('[data-testid="buoy-toggle"]');
+    await expect(toggle).toBeVisible();
     await expect(toggle).toContainText('NDBC');
   });
 
