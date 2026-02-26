@@ -88,21 +88,25 @@ const LAYER_CONFIGS: Record<MapLayer, {
   legendTitle: string;
   legendGradient: string;
   legendLabels: string[];
+  mobileLegendLabels: string[];
 }> = {
   waveHeight: {
     legendTitle: 'Wave Height',
     legendGradient: 'linear-gradient(to top, #B4AFA8 0%, #6E9BD2 10%, #4682C4 20%, #3A6BB4 35%, #2D56A0 55%, #1F3F8C 75%, #0F2364 100%)',
     legendLabels: ['0m', '3m', '6m', '9m', '12m', '15m+'],
+    mobileLegendLabels: ['0m', '5m', '10m', '15m+'],
   },
   wavePeriod: {
     legendTitle: 'Wave Period',
     legendGradient: 'linear-gradient(to top, #B4AFA8, #968CC3, #5F41A5, #41288C)',
     legendLabels: ['0s', '5s', '10s', '15s', '20s', '25s+'],
+    mobileLegendLabels: ['0s', '10s', '25s+'],
   },
   wind: {
     legendTitle: 'Wind Speed',
     legendGradient: 'linear-gradient(to top, #B4AFA8, #78AFAA, #1E827D, #0F6464)',
     legendLabels: ['0', '5', '10', '15', '20', '25+'],
+    mobileLegendLabels: ['0', '10', '25+'],
   },
 };
 
@@ -874,10 +878,10 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
           {/* Layer Modal */}
           {showLayerModal && (
             <>
-              <div className="fixed inset-0 z-[5]" onClick={() => setShowLayerModal(false)} />
+              <div className="fixed inset-0 z-20" onClick={() => setShowLayerModal(false)} />
               <div
                 data-testid="layer-modal"
-                className="absolute top-[calc(100%+8px)] left-0 bg-surface rounded-md shadow border border-border p-3 z-10 w-[200px]"
+                className="absolute top-[calc(100%+8px)] left-0 bg-surface rounded-md shadow-md border border-border p-3 z-30 w-[200px]"
               >
                 {/* Data Layer section */}
                 <div className="text-xs font-medium text-text-tertiary mb-2">Data Layer</div>
@@ -981,27 +985,26 @@ export default function WaveMap({ onFavoritesChange, initialSpot }: WaveMapProps
         </div>
       )}
 
-      {/* Vertical Legend */}
+      {/* Vertical Legend — safe zone between top controls and TimeSlider */}
       <div
         data-testid="legend"
-        className="absolute z-10 bg-surface/80 rounded-md shadow-sm border border-border px-2 py-2.5"
-        style={{ bottom: '120px', left: '12px' }}
+        className="absolute left-3 z-20 bottom-[100px] bg-surface/80 rounded-md shadow-sm border border-border px-1.5 py-1.5 md:px-2 md:py-2 flex flex-col overflow-hidden max-h-[calc(100vh-280px)]"
       >
-        <div className="text-xs font-medium text-text-primary mb-2 text-center whitespace-nowrap">
+        <div className="text-[11px] md:text-xs font-medium text-text-primary mb-1 md:mb-1.5 text-center whitespace-nowrap shrink-0">
           {LAYER_CONFIGS[activeLayer].legendTitle}
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1 md:gap-1.5 flex-1 min-h-0">
           {/* Gradient bar */}
           <div
-            className="w-2 rounded-sm shrink-0"
-            style={{ height: 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
+            className="w-1.5 md:w-2 rounded-sm shrink-0"
+            style={{ height: isMobile ? 120 : 180, background: LAYER_CONFIGS[activeLayer].legendGradient }}
           />
           {/* Labels — evenly spaced */}
-          <div className="relative" style={{ height: 180 }}>
-            {LAYER_CONFIGS[activeLayer].legendLabels.map((label, i, arr) => (
+          <div className="relative" style={{ height: isMobile ? 120 : 180 }}>
+            {(isMobile ? LAYER_CONFIGS[activeLayer].mobileLegendLabels : LAYER_CONFIGS[activeLayer].legendLabels).map((label, i, arr) => (
               <span
                 key={label}
-                className="absolute text-xs text-text-secondary tabular-nums leading-none whitespace-nowrap"
+                className="absolute text-[10px] md:text-xs text-text-secondary tabular-nums leading-none whitespace-nowrap"
                 style={{ bottom: `${(i / (arr.length - 1)) * 100}%`, transform: 'translateY(50%)' }}
               >
                 {label}
