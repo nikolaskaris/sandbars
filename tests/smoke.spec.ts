@@ -31,6 +31,32 @@ test.describe('Smoke Tests - UI Elements', () => {
     await expect(toggle).toContainText('NDBC');
   });
 
+  test('bathymetry toggle exists and is off by default', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
+
+    // Open layers panel
+    await expect(async () => {
+      await page.locator('[data-testid="nav-layers"]').click();
+      await expect(page.locator('[data-testid="layers-panel"]')).toBeVisible();
+    }).toPass({ timeout: 10000 });
+
+    const toggle = page.locator('[data-testid="bathymetry-toggle"]');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toContainText('Bathymetry');
+  });
+
+  test('both overlay toggles exist together', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
+
+    await expect(async () => {
+      await page.locator('[data-testid="nav-layers"]').click();
+      await expect(page.locator('[data-testid="layers-panel"]')).toBeVisible();
+    }).toPass({ timeout: 10000 });
+
+    await expect(page.locator('[data-testid="buoy-toggle"]')).toBeVisible();
+    await expect(page.locator('[data-testid="bathymetry-toggle"]')).toBeVisible();
+  });
+
   test('time slider has block grid', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 

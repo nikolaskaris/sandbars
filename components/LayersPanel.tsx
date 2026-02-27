@@ -11,6 +11,8 @@ interface LayersPanelProps {
   onLayerChange: (layer: MapLayer) => void;
   showBuoys: boolean;
   onBuoyToggle: (show: boolean) => void;
+  showBathymetry: boolean;
+  onBathymetryToggle: (show: boolean) => void;
   onClose: () => void;
 }
 
@@ -25,6 +27,8 @@ export default function LayersPanel({
   onLayerChange,
   showBuoys,
   onBuoyToggle,
+  showBathymetry,
+  onBathymetryToggle,
   onClose,
 }: LayersPanelProps) {
   const isMobile = useIsMobile();
@@ -74,6 +78,15 @@ export default function LayersPanel({
             />
             <div className="w-2.5 h-2.5 rounded-full bg-surface border-text-primary border-[1.5px]" />
             <span className="text-sm text-text-secondary">NDBC Buoys</span>
+          </div>
+          <div className="flex items-center gap-2 px-2.5 py-1.5" data-testid="bathymetry-toggle">
+            <Toggle
+              checked={showBathymetry}
+              onChange={onBathymetryToggle}
+              size="sm"
+            />
+            <div className="w-2.5 h-0.5 rounded-sm" style={{ backgroundColor: '#64748B' }} />
+            <span className="text-sm text-text-secondary">Bathymetry</span>
           </div>
         </div>
       </div>

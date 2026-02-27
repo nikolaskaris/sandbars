@@ -19,6 +19,7 @@ export default function HomePage() {
   // Lifted layer state (was inside WaveMap)
   const [activeLayer, setActiveLayer] = useState<MapLayer>('waveHeight');
   const [showBuoys, setShowBuoys] = useState(false);
+  const [showBathymetry, setShowBathymetry] = useState(false);
 
   useEffect(() => {
     setFavoritesCount(getFavorites().length);
@@ -58,6 +59,7 @@ export default function HomePage() {
           initialSpot={initialSpot}
           activeLayer={activeLayer}
           showBuoys={showBuoys}
+          showBathymetry={showBathymetry}
           onSpotSelect={() => { if (activeView !== 'map') setActiveView('map'); }}
         />
 
@@ -68,6 +70,8 @@ export default function HomePage() {
             onLayerChange={setActiveLayer}
             showBuoys={showBuoys}
             onBuoyToggle={setShowBuoys}
+            showBathymetry={showBathymetry}
+            onBathymetryToggle={setShowBathymetry}
             onClose={() => setActiveView('map')}
           />
         )}

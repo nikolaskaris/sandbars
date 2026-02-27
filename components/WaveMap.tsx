@@ -90,6 +90,7 @@ const BATHYMETRY_LAYER_IDS = [
   'bathymetry-shelf',
   'bathymetry-slope',
   'bathymetry-deep',
+  'bathymetry-labels',
 ];
 
 function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
@@ -324,10 +325,11 @@ interface WaveMapProps {
   initialSpot?: { lat: number; lng: number; name: string } | null;
   activeLayer: MapLayer;
   showBuoys: boolean;
+  showBathymetry: boolean;
   onSpotSelect?: () => void;
 }
 
-export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys, onSpotSelect }: WaveMapProps) {
+export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys, showBathymetry, onSpotSelect }: WaveMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
@@ -347,8 +349,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   const showBuoysRef = useRef(showBuoys);
   useEffect(() => { showBuoysRef.current = showBuoys; }, [showBuoys]);
 
-  // Bathymetry contour visibility (toggled from LayersPanel in a future prompt)
-  const [showBathymetry, setShowBathymetry] = useState(false);
+  // Bathymetry contour visibility (controlled via props from page.tsx)
   const showBathymetryRef = useRef(showBathymetry);
   useEffect(() => { showBathymetryRef.current = showBathymetry; }, [showBathymetry]);
 
@@ -803,6 +804,48 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
               'line-width': cl.width,
             },
           }, insertBefore);
+        }
+
+        // Depth labels along contour lines (≥50m only to avoid clutter)
+        m.addLayer({
+          id: 'bathymetry-labels',
+          type: 'symbol',
+          source: 'bathymetry',
+          'source-layer': 'bathymetry',
+          filter: ['>=', ['get', 'depth'], 50],
+          minzoom: 6,
+          layout: {
+            visibility: 'none',
+            'symbol-placement': 'line',
+            'text-field': ['concat', ['to-string', ['get', 'depth']], 'm'],
+            'text-font': ['Open Sans Regular'],
+            'text-size': 9,
+            'symbol-spacing': 300,
+            'text-max-angle': 30,
+          },
+          paint: {
+            'text-color': '#64748B',
+            'text-opacity': 0.6,
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1,
+          },
+        }, insertBefore);
+
+        // Click handler for contour depth info
+        for (const cl of contourLayers) {
+          m.on('click', cl.id, (e) => {
+            if (!showBathymetryRef.current) return;
+            if (!e.features || e.features.length === 0) return;
+            if (popup.current?.isOpen()) return; // don't override existing popup
+
+            const depth = e.features[0].properties?.depth;
+            if (depth == null) return;
+
+            popup.current
+              ?.setLngLat(e.lngLat)
+              .setHTML(wrapPopup(`${popupTitle(`Depth: ${depth}m`)}`))
+              .addTo(m);
+          });
         }
       } catch (e) {
         console.warn('Failed to add bathymetry contours:', e);
