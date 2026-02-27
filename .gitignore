@@ -16,6 +16,9 @@ data/grib/
 # GeoJSON land/lake masks (large, downloaded on demand)
 scripts/ne_*.geojson
 
+# Natural Earth shapefiles (downloaded by generate-water-mask.py)
+scripts/data/natural-earth/
+
 # GeoJSON data files (served from Supabase Storage)
 public/data/*.geojson
 

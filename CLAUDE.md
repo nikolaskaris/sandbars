@@ -71,7 +71,9 @@ sandbars/
 │   └── config.ts          # Supabase URLs, constants
 ├── scripts/
 │   ├── download-grib-files.sh    # Fetch NOAA data
-│   ├── convert-grib-to-geojson.py # GRIB → GeoJSON
+│   ├── convert-grib-to-geojson.py # GRIB → GeoJSON + PNG rasters
+│   ├── generate-water-mask.py    # NE 10m → water mask PNGs
+│   ├── generate-bathymetric-contours.py # GEBCO → PMTiles
 │   └── upload-to-supabase.js     # Upload to storage
 ├── tests/
 │   └── smoke.spec.ts      # Playwright E2E tests
@@ -115,6 +117,25 @@ Ocean depth contour lines from GEBCO bathymetric data, served as PMTiles vector 
    ```
 3. Output: `public/data/bathymetry-contours.pmtiles`
 4. Upload to Supabase Storage or serve from `public/data/`
+
+### Water Mask
+
+Land/water mask applied during PNG raster generation so land pixels are transparent.
+Generated from Natural Earth 10m coastline data using GDAL.
+
+**Prerequisites:** `brew install gdal` (macOS), `pip3 install Pillow numpy scipy`
+
+**Regenerate masks:**
+```bash
+python3 scripts/generate-water-mask.py --all   # Both 1440x1440 + 720x720
+python3 scripts/generate-water-mask.py          # Just 1440x1440
+```
+
+- Downloads NE 10m land + minor islands shapefiles (cached in `scripts/data/natural-earth/`)
+- Rasterizes at 6x target resolution, downsamples with average resampling
+- 1px erosion so forecast data extends slightly under the vector coastline
+- Output: `scripts/water_mask_{W}x{H}.png` (grayscale, water=255, land=0)
+- Pipeline (`convert-grib-to-geojson.py`) loads the mask and applies it to PNG alpha channel
 
 ## Planning Documents
 
