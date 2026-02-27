@@ -91,6 +91,14 @@ const BATHYMETRY_LAYER_IDS = [
   'bathymetry-slope',
   'bathymetry-deep',
   'bathymetry-labels',
+  'bathymetry-labels-shallow',
+];
+
+const BATHYMETRY_LINE_LAYER_IDS = [
+  'bathymetry-nearshore',
+  'bathymetry-shelf',
+  'bathymetry-slope',
+  'bathymetry-deep',
 ];
 
 function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
@@ -806,7 +814,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
           }, insertBefore);
         }
 
-        // Depth labels along contour lines (≥50m only to avoid clutter)
+        // Depth labels along contour lines (≥50m at zoom 6+)
         m.addLayer({
           id: 'bathymetry-labels',
           type: 'symbol',
@@ -819,7 +827,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
             'symbol-placement': 'line',
             'text-field': ['concat', ['to-string', ['get', 'depth']], 'm'],
             'text-font': ['Open Sans Regular'],
-            'text-size': 9,
+            'text-size': 12,
             'symbol-spacing': 300,
             'text-max-angle': 30,
           },
@@ -827,26 +835,34 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
             'text-color': '#64748B',
             'text-opacity': 0.6,
             'text-halo-color': '#ffffff',
-            'text-halo-width': 1,
+            'text-halo-width': 1.5,
           },
         }, insertBefore);
 
-        // Click handler for contour depth info
-        for (const cl of contourLayers) {
-          m.on('click', cl.id, (e) => {
-            if (!showBathymetryRef.current) return;
-            if (!e.features || e.features.length === 0) return;
-            if (popup.current?.isOpen()) return; // don't override existing popup
-
-            const depth = e.features[0].properties?.depth;
-            if (depth == null) return;
-
-            popup.current
-              ?.setLngLat(e.lngLat)
-              .setHTML(wrapPopup(`${popupTitle(`Depth: ${depth}m`)}`))
-              .addTo(m);
-          });
-        }
+        // Shallow depth labels (<50m at zoom 10+ to avoid clutter)
+        m.addLayer({
+          id: 'bathymetry-labels-shallow',
+          type: 'symbol',
+          source: 'bathymetry',
+          'source-layer': 'bathymetry',
+          filter: ['<', ['get', 'depth'], 50],
+          minzoom: 10,
+          layout: {
+            visibility: 'none',
+            'symbol-placement': 'line',
+            'text-field': ['concat', ['to-string', ['get', 'depth']], 'm'],
+            'text-font': ['Open Sans Regular'],
+            'text-size': 12,
+            'symbol-spacing': 300,
+            'text-max-angle': 30,
+          },
+          paint: {
+            'text-color': '#64748B',
+            'text-opacity': 0.6,
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.5,
+          },
+        }, insertBefore);
       } catch (e) {
         console.warn('Failed to add bathymetry contours:', e);
       }
@@ -911,6 +927,34 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
           setBuoyError(buoyResult.reason instanceof Error ? buoyResult.reason.message : 'Failed to load buoy data');
         }
 
+        // Bathymetry contour click handler (registered AFTER buoy so buoys take priority)
+        for (const layerId of BATHYMETRY_LINE_LAYER_IDS) {
+          if (!m.getLayer(layerId)) continue;
+
+          m.on('click', layerId, (e) => {
+            if (!showBathymetryRef.current) return;
+            if (!e.features || e.features.length === 0) return;
+            // Don't override buoy popup
+            if (popupTypeRef.current === 'buoy' && popup.current?.isOpen()) return;
+
+            const depth = e.features[0].properties?.depth;
+            if (depth == null) return;
+
+            popupTypeRef.current = 'wave';
+            popup.current
+              ?.setLngLat(e.lngLat)
+              .setHTML(wrapPopup(`${popupTitle(`Depth: ${depth}m`)}`))
+              .addTo(m);
+          });
+
+          m.on('mouseenter', layerId, () => {
+            if (showBathymetryRef.current) m.getCanvas().style.cursor = 'pointer';
+          });
+          m.on('mouseleave', layerId, () => {
+            m.getCanvas().style.cursor = '';
+          });
+        }
+
         // Clear selected point when popup closes
         popup.current.on('close', () => {
           selectedPointRef.current = null;
@@ -932,6 +976,15 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
             if (map.current.getLayer('buoy-circles')) {
               const buoyFeatures = map.current.queryRenderedFeatures(e.point, { layers: ['buoy-circles'] });
               if (buoyFeatures.length > 0) return;
+            }
+
+            // Don't interfere with bathymetry contour clicks
+            if (showBathymetryRef.current) {
+              const visibleBathLayers = BATHYMETRY_LINE_LAYER_IDS.filter(id => map.current!.getLayer(id));
+              if (visibleBathLayers.length > 0) {
+                const bathFeatures = map.current.queryRenderedFeatures(e.point, { layers: visibleBathLayers });
+                if (bathFeatures.length > 0) return;
+              }
             }
 
             // Close any open buoy popup
