@@ -11,6 +11,7 @@ import { MapLayer } from './LayerToggle';
 import Button from './ui/Button';
 import { Plus, Minus, AlertTriangle, AlertCircle } from 'lucide-react';
 import { DATA_URLS, SUPABASE_STORAGE_URL } from '@/lib/config';
+import { Protocol } from 'pmtiles';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   SwellData,
@@ -25,6 +26,18 @@ import {
   findNearestForecastHour,
   findNearestFeature,
 } from '@/lib/wave-utils';
+
+// =============================================================================
+// PMTiles Protocol Registration
+// =============================================================================
+
+let pmtilesRegistered = false;
+function ensurePmtilesProtocol() {
+  if (pmtilesRegistered) return;
+  const protocol = new Protocol();
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+  pmtilesRegistered = true;
+}
 
 // =============================================================================
 // Constants & Styling
@@ -71,6 +84,13 @@ const WATER_COLORS: Record<MapLayer, string> = {
   wavePeriod: '#C8D8E4',  // soft warm-desaturated blue
   wind: '#C8D8E4',        // soft warm-desaturated blue
 };
+
+const BATHYMETRY_LAYER_IDS = [
+  'bathymetry-nearshore',
+  'bathymetry-shelf',
+  'bathymetry-slope',
+  'bathymetry-deep',
+];
 
 function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
   if (mapInstance.getLayer('water')) {
@@ -327,6 +347,11 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   const showBuoysRef = useRef(showBuoys);
   useEffect(() => { showBuoysRef.current = showBuoys; }, [showBuoys]);
 
+  // Bathymetry contour visibility (toggled from LayersPanel in a future prompt)
+  const [showBathymetry, setShowBathymetry] = useState(false);
+  const showBathymetryRef = useRef(showBathymetry);
+  useEffect(() => { showBathymetryRef.current = showBathymetry; }, [showBathymetry]);
+
   // Buoy data state
   const [buoyError, setBuoyError] = useState<string | null>(null);
   const [buoyLastUpdated, setBuoyLastUpdated] = useState<Date | null>(null);
@@ -526,6 +551,17 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
     }
   }, [showBuoys]);
 
+  // Toggle bathymetry contour layer visibility
+  useEffect(() => {
+    if (!map.current) return;
+    const visibility = showBathymetry ? 'visible' : 'none';
+    for (const id of BATHYMETRY_LAYER_IDS) {
+      if (map.current.getLayer(id)) {
+        map.current.setLayoutProperty(id, 'visibility', visibility);
+      }
+    }
+  }, [showBathymetry]);
+
   // Update base map water color when active layer changes
   useEffect(() => {
     if (map.current && map.current.isStyleLoaded()) {
@@ -552,6 +588,9 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
+    // Register PMTiles protocol before map init
+    ensurePmtilesProtocol();
+
     try {
       map.current = new maplibregl.Map({
         container: mapContainer.current,
@@ -569,6 +608,8 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
     map.current.on('error', (e) => {
       // Suppress abort errors from rapid image source updates
       if (e.error?.message?.includes('abort')) return;
+      // Suppress PMTiles/bathymetry fetch errors (file may not exist yet)
+      if (e.error?.message?.includes('pmtiles') || e.error?.message?.includes('bathymetry')) return;
       console.error('Map error:', e.error);
     });
 
@@ -707,6 +748,65 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
         source: 'inland-water',
         paint: { 'fill-color': '#D8E0E4', 'fill-opacity': 1 },
       }, insertBefore);
+
+      // --- Terrain hillshade (always on, covers land + ocean floor) ---
+      try {
+        m.addSource('terrain-dem', {
+          type: 'raster-dem',
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 15,
+          encoding: 'terrarium',
+        });
+        m.addLayer({
+          id: 'hillshade',
+          type: 'hillshade',
+          source: 'terrain-dem',
+          paint: {
+            'hillshade-exaggeration': 0.15,
+            'hillshade-shadow-color': '#1a1a2e',
+            'hillshade-highlight-color': '#fefefe',
+            'hillshade-accent-color': '#3d405b',
+            'hillshade-illumination-direction': 315,
+          },
+        }, insertBefore);
+      } catch (e) {
+        console.warn('Failed to add terrain hillshade:', e);
+      }
+
+      // --- Bathymetry contour lines from PMTiles ---
+      try {
+        m.addSource('bathymetry', {
+          type: 'vector',
+          url: `pmtiles://${DATA_URLS.bathymetryPmtiles}`,
+        });
+
+        const contourLayers: { id: string; filter: maplibregl.FilterSpecification; opacity: number; width: number; minzoom: number }[] = [
+          { id: 'bathymetry-nearshore', filter: ['<', ['get', 'depth'], 50], opacity: 0.5, width: 1.2, minzoom: 8 },
+          { id: 'bathymetry-shelf', filter: ['all', ['>=', ['get', 'depth'], 50], ['<', ['get', 'depth'], 200]], opacity: 0.35, width: 0.9, minzoom: 5 },
+          { id: 'bathymetry-slope', filter: ['all', ['>=', ['get', 'depth'], 200], ['<', ['get', 'depth'], 1000]], opacity: 0.2, width: 0.7, minzoom: 3 },
+          { id: 'bathymetry-deep', filter: ['>=', ['get', 'depth'], 1000], opacity: 0.12, width: 0.5, minzoom: 2 },
+        ];
+
+        for (const cl of contourLayers) {
+          m.addLayer({
+            id: cl.id,
+            type: 'line',
+            source: 'bathymetry',
+            'source-layer': 'bathymetry',
+            filter: cl.filter,
+            minzoom: cl.minzoom,
+            layout: { visibility: 'none' },
+            paint: {
+              'line-color': '#64748B',
+              'line-opacity': cl.opacity,
+              'line-width': cl.width,
+            },
+          }, insertBefore);
+        }
+      } catch (e) {
+        console.warn('Failed to add bathymetry contours:', e);
+      }
 
       try {
         // Parallel fetch both data sources from Supabase Storage (Issue #17)

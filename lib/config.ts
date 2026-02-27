@@ -13,4 +13,5 @@ export const DATA_URLS = {
     return `${SUPABASE_STORAGE_URL}/wave-data-f${hourStr}.geojson`;
   },
   buoyObservations: `${SUPABASE_STORAGE_URL}/buoy-observations.geojson`,
+  bathymetryPmtiles: `${SUPABASE_STORAGE_URL}/bathymetry-contours.pmtiles`,
 };

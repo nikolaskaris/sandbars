@@ -189,6 +189,37 @@ test.describe('Smoke Tests - Map & Data (requires WebGL)', () => {
     expect(count).toBeGreaterThanOrEqual(14);
   });
 
+  test('hillshade layer is added to map', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    const hasHillshade = await page.evaluate(() => {
+      const m = (window as unknown as { map: { getSource: (id: string) => unknown; getLayer: (id: string) => { visibility?: string } | null } }).map;
+      const source = m.getSource('terrain-dem');
+      const layer = m.getLayer('hillshade');
+      return { hasSource: !!source, hasLayer: !!layer };
+    });
+    expect(hasHillshade.hasSource).toBe(true);
+    expect(hasHillshade.hasLayer).toBe(true);
+  });
+
+  test('bathymetry contour layers are defined on map', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    const layers = await page.evaluate(() => {
+      const m = (window as unknown as { map: { getLayer: (id: string) => { visibility?: string; layout?: { visibility?: string } } | null; getLayoutProperty: (id: string, prop: string) => string } }).map;
+      const ids = ['bathymetry-nearshore', 'bathymetry-shelf', 'bathymetry-slope', 'bathymetry-deep'];
+      return ids.map(id => ({
+        id,
+        exists: !!m.getLayer(id),
+        visibility: m.getLayer(id) ? m.getLayoutProperty(id, 'visibility') : null,
+      }));
+    });
+    for (const l of layers) {
+      expect(l.exists).toBe(true);
+      expect(l.visibility).toBe('none'); // default off
+    }
+  });
+
   test('buoy data request is made to Supabase', async ({ page }) => {
     const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('buoy-observations.geojson'),
