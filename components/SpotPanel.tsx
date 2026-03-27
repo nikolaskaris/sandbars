@@ -10,7 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { favoritesService } from '@/lib/favorites-service';
 import { TideAtPoint } from '@/lib/tides';
 import { getFullForecast, ForecastAtPoint, ForecastSummary } from '@/lib/forecast';
-import { findNearbySpots, Spot } from '@/lib/spots';
+import { findNearbySpots, findNearestSpot, Spot } from '@/lib/spots';
+import { computeQuality, scoreToBorderClass, scoreColor } from '@/lib/quality';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
 import Skeleton from './ui/Skeleton';
@@ -76,45 +77,7 @@ function groupByDay(entries: ForecastAtPoint[]): DayGroup[] {
   return result;
 }
 
-/**
- * Temporary heuristic quality indicator. Will be replaced by the real
- * quality scoring engine in Phase 5. Provides the visual color signal
- * for forecast row left-border scanning.
- */
-function heuristicQuality(entry: ForecastAtPoint): 'poor' | 'fair' | 'good' | 'great' | 'epic' {
-  const h = entry.waves.height;
-  const p = entry.waves.swells[0]?.period ?? 0;
-  const w = entry.wind?.speed ?? 0;
-
-  let score = 0;
-
-  // Height: sweet spot 1-3m
-  if (h >= 1 && h <= 3) score += 30;
-  else if (h >= 0.5 && h <= 5) score += 15;
-
-  // Period: longer is better
-  if (p >= 12) score += 30;
-  else if (p >= 8) score += 15;
-
-  // Wind: lighter is better
-  if (w <= 5) score += 30;
-  else if (w <= 10) score += 15;
-  else if (w >= 15) score -= 10;
-
-  if (score >= 75) return 'epic';
-  if (score >= 55) return 'great';
-  if (score >= 40) return 'good';
-  if (score >= 20) return 'fair';
-  return 'poor';
-}
-
-const QUALITY_BORDER: Record<string, string> = {
-  epic: 'border-l-quality-epic',
-  great: 'border-l-quality-great',
-  good: 'border-l-quality-good',
-  fair: 'border-l-quality-fair',
-  poor: 'border-l-quality-poor',
-};
+// Quality scoring is in lib/quality.ts — uses spot metadata for per-spot tuning
 
 const TIDE_STATE_ARROW: Record<string, string> = {
   rising: '↑',
@@ -258,8 +221,19 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   const [currentTide, setCurrentTide] = useState<TideAtPoint | null>(null);
   const [tideCurve, setTideCurve] = useState<TideCurvePoint[] | null>(null);
   const [nearbySpots, setNearbySpots] = useState<Spot[]>([]);
+  const [spotMeta, setSpotMeta] = useState<Spot | null>(null);
   const [waterTemp, setWaterTemp] = useState<number | null>(null);
   const [airTemp, setAirTemp] = useState<number | null>(null);
+
+  // Try to find catalog spot metadata for quality scoring
+  useEffect(() => {
+    if (location.isLand) return;
+    let cancelled = false;
+    findNearestSpot(location.lat, location.lng, 0.05).then((spot) => {
+      if (!cancelled) setSpotMeta(spot);
+    });
+    return () => { cancelled = true; };
+  }, [location.lat, location.lng, location.isLand]);
 
   // Load nearby spots for land clicks
   useEffect(() => {
@@ -564,16 +538,25 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                     })
                   : `+${entry.forecastHour}h`;
 
-                const quality = heuristicQuality(entry);
+                const quality = computeQuality(entry, spotMeta);
 
                 return (
                   <div
                     key={entry.forecastHour}
-                    className={`flex items-start gap-3 py-2.5 px-3 border-l-[3px] min-h-[44px] hover:bg-surface-secondary transition-colors duration-100 ${QUALITY_BORDER[quality]}`}
+                    className={`flex items-start gap-3 py-2.5 px-3 border-l-[3px] min-h-[44px] hover:bg-surface-secondary transition-colors duration-100 ${scoreToBorderClass(quality.score)}`}
                   >
-                    {/* Time */}
-                    <div className="text-sm font-medium text-text-primary tabular-nums w-[70px] shrink-0">
-                      {timeStr}
+                    {/* Time + Score */}
+                    <div className="w-[70px] shrink-0">
+                      <div className="text-sm font-medium text-text-primary tabular-nums">
+                        {timeStr}
+                      </div>
+                      <div
+                        className="text-xs font-medium tabular-nums mt-0.5"
+                        style={{ color: scoreColor(quality.score) }}
+                        title={`Swell ${quality.sub.swell.toFixed(0)} · Wind ${quality.sub.wind.toFixed(0)} · Period ${quality.sub.period.toFixed(0)} · Tide ${quality.sub.tide.toFixed(0)}`}
+                      >
+                        {quality.score.toFixed(1)} {quality.label}
+                      </div>
                     </div>
 
                     {/* Wave + swell details */}
