@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MapPin, Star, X, Wind as WindIcon } from 'lucide-react';
+import { MapPin, Star, X, Wind as WindIcon, Pencil, Check } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { convertWaveHeight, convertWindSpeed, convertTemp, tempUnitLabel } from '@/lib/preferences';
@@ -220,6 +220,12 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   const [toast, setToast] = useState<string | null>(null);
   const [showNameInput, setShowNameInput] = useState(false);
   const [customName, setCustomName] = useState('');
+  const [displayName, setDisplayName] = useState(location.name);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  // Sync displayName when location changes
+  useEffect(() => { setDisplayName(location.name); }, [location.name]);
   const [currentTide, setCurrentTide] = useState<TideAtPoint | null>(null);
   const [tideCurve, setTideCurve] = useState<TideCurvePoint[] | null>(null);
   const [nearbySpots, setNearbySpots] = useState<Spot[]>([]);
@@ -251,6 +257,25 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   useEffect(() => {
     favoritesService.isFavorited(user?.id || null, location.lat, location.lng).then(setSaved);
   }, [user, location.lat, location.lng]);
+
+  const handleRenameFromHeader = async () => {
+    const trimmed = editNameValue.trim();
+    if (!trimmed || trimmed === displayName) {
+      setEditingName(false);
+      return;
+    }
+    // Find the favorite to get its ID
+    const favs = await favoritesService.getFavorites(user?.id || null);
+    const fav = favs.find(
+      f => Math.abs(f.lat - location.lat) < 0.001 && Math.abs(f.lng - location.lng) < 0.001
+    );
+    if (fav) {
+      await favoritesService.renameFavorite(user?.id || null, fav.id, trimmed);
+      setDisplayName(trimmed);
+      onFavoritesChange?.();
+    }
+    setEditingName(false);
+  };
 
   // Detect if this is a custom (non-catalog) spot by checking if name looks like coordinates
   const isCustomSpot = !spotMeta || /^\d/.test(location.name) || location.name.includes('°');
@@ -394,7 +419,34 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <MapPin className="h-4 w-4 text-text-tertiary shrink-0" strokeWidth={1.5} />
-            <span className="text-lg font-medium text-text-primary truncate">{location.name}</span>
+            {editingName ? (
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleRenameFromHeader(); if (e.key === 'Escape') setEditingName(false); }}
+                  autoFocus
+                  className="flex-1 text-lg font-medium px-1.5 py-0.5 rounded border border-accent bg-surface text-text-primary focus:outline-none min-w-0"
+                />
+                <button onClick={handleRenameFromHeader} className="text-accent hover:text-accent-hover p-0.5">
+                  <Check className="h-4 w-4" strokeWidth={2} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <span className="text-lg font-medium text-text-primary truncate">{displayName}</span>
+                {saved && (
+                  <button
+                    onClick={() => { setEditNameValue(displayName); setEditingName(true); }}
+                    className="text-text-tertiary hover:text-text-secondary p-0.5 shrink-0"
+                    aria-label="Rename spot"
+                  >
+                    <Pencil className="h-3 w-3" strokeWidth={1.5} />
+                  </button>
+                )}
+              </>
+            )}
           </div>
           <div className="text-sm text-text-secondary mt-0.5">16-Day Forecast</div>
           {(currentTide || waterTemp != null || airTemp != null) && (
