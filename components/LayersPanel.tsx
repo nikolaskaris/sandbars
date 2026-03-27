@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Waves, Timer, Wind } from 'lucide-react';
+import { X, Waves, Timer, Wind, Thermometer } from 'lucide-react';
 import { MapLayer } from './LayerToggle';
 import Toggle from './ui/Toggle';
 import IconButton from './ui/IconButton';
@@ -20,6 +20,7 @@ const LAYER_OPTIONS: { id: MapLayer; label: string; icon: typeof Waves }[] = [
   { id: 'waveHeight', label: 'Wave Height', icon: Waves },
   { id: 'wavePeriod', label: 'Wave Period', icon: Timer },
   { id: 'wind', label: 'Wind Speed', icon: Wind },
+  { id: 'sst', label: 'Water Temp', icon: Thermometer },
 ];
 
 export default function LayersPanel({

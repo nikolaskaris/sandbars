@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { MapPin, Star, X, Wind as WindIcon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import { convertWaveHeight, convertWindSpeed } from '@/lib/preferences';
 import {
   FORECAST_HOURS,
   SwellData,
@@ -14,15 +16,19 @@ import {
   findNearestFeature,
 } from '@/lib/wave-utils';
 import { DATA_URLS } from '@/lib/config';
-import { isFavorite, addFavorite, removeFavorite, findFavorite } from '@/lib/favorites';
+import { useAuth } from '@/contexts/AuthContext';
+import { favoritesService } from '@/lib/favorites-service';
+import { getTideAtPoint, getTideCurve, TideAtPoint } from '@/lib/tides';
+import { findNearbySpots, Spot } from '@/lib/spots';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
 import Skeleton from './ui/Skeleton';
 
 interface SpotPanelProps {
-  location: { lat: number; lng: number; name: string };
+  location: { lat: number; lng: number; name: string; isLand?: boolean };
   onClose: () => void;
   onFavoritesChange?: () => void;
+  onSelectSpot?: (lat: number, lng: number, name: string) => void;
 }
 
 interface ForecastEntry {
@@ -31,6 +37,13 @@ interface ForecastEntry {
   swells: SwellData[];
   wind: WindData;
   waveHeight: number;
+  tideHeight?: number;
+  tideState?: 'rising' | 'falling' | 'high' | 'low';
+}
+
+interface TideCurvePoint {
+  time: Date;
+  height: number;
 }
 
 interface DayGroup {
@@ -120,29 +133,201 @@ const QUALITY_BORDER: Record<string, string> = {
   poor: 'border-l-quality-poor',
 };
 
-export default function SpotPanel({ location, onClose, onFavoritesChange }: SpotPanelProps) {
+const TIDE_STATE_ARROW: Record<string, string> = {
+  rising: '↑',
+  falling: '↓',
+  high: '⬆',
+  low: '⬇',
+};
+
+const TIDE_STATE_LABEL: Record<string, string> = {
+  rising: 'Rising',
+  falling: 'Falling',
+  high: 'High',
+  low: 'Low',
+};
+
+function TideSparkline({
+  curve,
+  nowMs,
+  width = 280,
+  height = 50,
+}: {
+  curve: TideCurvePoint[];
+  nowMs: number;
+  width?: number;
+  height?: number;
+}) {
+  if (curve.length < 2) return null;
+
+  const minH = Math.min(...curve.map((p) => p.height));
+  const maxH = Math.max(...curve.map((p) => p.height));
+  const range = maxH - minH || 0.1;
+  const padding = 2;
+  const plotH = height - padding * 2;
+  const plotW = width - padding * 2;
+
+  const startMs = curve[0].time.getTime();
+  const endMs = curve[curve.length - 1].time.getTime();
+  const timeRange = endMs - startMs || 1;
+
+  const toX = (ms: number) => padding + ((ms - startMs) / timeRange) * plotW;
+  const toY = (h: number) => padding + plotH - ((h - minH) / range) * plotH;
+
+  const pathD = curve
+    .map((p, i) => {
+      const x = toX(p.time.getTime());
+      const y = toY(p.height);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  // Now marker position
+  const nowX = toX(nowMs);
+  const nowInRange = nowMs >= startMs && nowMs <= endMs;
+
+  // Find tide height at now by linear interpolation on curve
+  let nowY = height / 2;
+  if (nowInRange) {
+    for (let i = 0; i < curve.length - 1; i++) {
+      const t0 = curve[i].time.getTime();
+      const t1 = curve[i + 1].time.getTime();
+      if (nowMs >= t0 && nowMs <= t1) {
+        const frac = (nowMs - t0) / (t1 - t0);
+        const h = curve[i].height + frac * (curve[i + 1].height - curve[i].height);
+        nowY = toY(h);
+        break;
+      }
+    }
+  }
+
+  // Hour labels at 6hr intervals
+  const hourLabels: Array<{ x: number; label: string }> = [];
+  for (let i = 0; i < curve.length; i++) {
+    const t = curve[i].time;
+    if (t.getMinutes() === 0 && t.getHours() % 6 === 0) {
+      hourLabels.push({
+        x: toX(t.getTime()),
+        label: t.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }),
+      });
+    }
+  }
+
+  return (
+    <svg width={width} height={height + 14} className="block">
+      {/* Zero line */}
+      {minH < 0 && maxH > 0 && (
+        <line
+          x1={padding}
+          y1={toY(0)}
+          x2={width - padding}
+          y2={toY(0)}
+          stroke="#E0D8CC"
+          strokeWidth={0.5}
+          strokeDasharray="2,2"
+        />
+      )}
+      {/* Tide curve */}
+      <path d={pathD} fill="none" stroke="#B8704C" strokeWidth={1.5} opacity={0.8} />
+      {/* Now marker */}
+      {nowInRange && (
+        <>
+          <line
+            x1={nowX}
+            y1={padding}
+            x2={nowX}
+            y2={height}
+            stroke="#B5ADA4"
+            strokeWidth={0.5}
+            strokeDasharray="2,2"
+          />
+          <circle cx={nowX} cy={nowY} r={3} fill="#B8704C" />
+        </>
+      )}
+      {/* Hour labels */}
+      {hourLabels.map((hl, i) => (
+        <text
+          key={i}
+          x={hl.x}
+          y={height + 11}
+          textAnchor="middle"
+          fontSize={9}
+          fill="#B5ADA4"
+        >
+          {hl.label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+export default function SpotPanel({ location, onClose, onFavoritesChange, onSelectSpot }: SpotPanelProps) {
+  const { prefs } = usePreferences();
+  const { user } = useAuth();
   const [forecasts, setForecasts] = useState<ForecastEntry[]>([]);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('half');
-  const [saved, setSaved] = useState(() => isFavorite(location.lat, location.lng));
+  const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [currentTide, setCurrentTide] = useState<TideAtPoint | null>(null);
+  const [tideCurve, setTideCurve] = useState<TideCurvePoint[] | null>(null);
+  const [nearbySpots, setNearbySpots] = useState<Spot[]>([]);
 
-  const handleToggleFavorite = () => {
+  // Load nearby spots for land clicks
+  useEffect(() => {
+    if (!location.isLand) return;
+    let cancelled = false;
+    findNearbySpots(location.lat, location.lng, 2, 5).then((spots) => {
+      if (!cancelled) setNearbySpots(spots);
+    });
+    return () => { cancelled = true; };
+  }, [location.lat, location.lng, location.isLand]);
+
+  // Load tide data for this location
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTide() {
+      const now = new Date();
+      const [tideInfo, curve] = await Promise.all([
+        getTideAtPoint(location.lat, location.lng, now),
+        getTideCurve(location.lat, location.lng, now, 12),
+      ]);
+      if (cancelled) return;
+      setCurrentTide(tideInfo);
+      setTideCurve(curve);
+    }
+
+    setCurrentTide(null);
+    setTideCurve(null);
+    loadTide();
+
+    return () => { cancelled = true; };
+  }, [location.lat, location.lng]);
+
+  // Check if this location is already favorited (async)
+  useEffect(() => {
+    favoritesService.isFavorited(user?.id || null, location.lat, location.lng).then(setSaved);
+  }, [user, location.lat, location.lng]);
+
+  const handleToggleFavorite = async () => {
     if (saved) {
-      const fav = findFavorite(location.lat, location.lng);
-      if (fav) removeFavorite(fav.id);
+      // Find the favorite to get its ID for removal
+      const favs = await favoritesService.getFavorites(user?.id || null);
+      const fav = favs.find(
+        f => Math.abs(f.lat - location.lat) < 0.001 && Math.abs(f.lng - location.lng) < 0.001
+      );
+      if (fav) await favoritesService.removeFavorite(user?.id || null, fav.id);
       setSaved(false);
       setToast('Removed');
     } else {
-      addFavorite({
-        id: crypto.randomUUID(),
+      await favoritesService.addFavorite(user?.id || null, {
         name: location.name,
         lat: location.lat,
         lng: location.lng,
-        createdAt: new Date().toISOString(),
       });
       setSaved(true);
       setToast('Saved!');
@@ -211,6 +396,17 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
               wind: wind || { speed: 0, direction: 0 },
               waveHeight: feature.properties.waveHeight,
             };
+
+            // Attach tide data for this forecast time
+            const validDate = new Date(data.metadata.valid_time);
+            if (!isNaN(validDate.getTime())) {
+              const tide = await getTideAtPoint(location.lat, location.lng, validDate);
+              if (tide) {
+                entry.tideHeight = tide.height;
+                entry.tideState = tide.state;
+              }
+            }
+
             entries.push(entry);
           }
         } catch (err) {
@@ -273,6 +469,19 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
             <span className="text-lg font-medium text-text-primary truncate">{location.name}</span>
           </div>
           <div className="text-sm text-text-secondary mt-0.5">16-Day Forecast</div>
+          {currentTide && (
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-text-tertiary">
+              <span className="text-text-secondary font-medium tabular-nums">
+                {convertWaveHeight(currentTide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}
+              </span>
+              <span>{TIDE_STATE_ARROW[currentTide.state]} {TIDE_STATE_LABEL[currentTide.state]}</span>
+              {currentTide.nextHigh && (
+                <span>
+                  · High {currentTide.nextHigh.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <Button
           data-testid="save-favorite-button"
@@ -303,8 +512,52 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
         </div>
       )}
 
+      {/* Land mode — no forecast, suggest nearby spots */}
+      {location.isLand && (
+        <div className="flex-1 overflow-y-auto px-5 py-6">
+          <div className="text-center mb-6">
+            <div className="text-text-tertiary text-sm mb-1">No surf forecast on land</div>
+            <div className="text-text-tertiary text-xs">Try clicking on the ocean, or check out a nearby spot:</div>
+          </div>
+
+          {nearbySpots.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {nearbySpots.map((spot) => (
+                <button
+                  key={spot.id}
+                  onClick={() => onSelectSpot?.(spot.latitude, spot.longitude, spot.name)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-md text-left hover:bg-surface-secondary transition-colors duration-100 border border-border"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-accent shrink-0" strokeWidth={1.5} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-text-primary truncate">{spot.name}</div>
+                    {spot.country && (
+                      <div className="text-xs text-text-tertiary">{spot.region ? `${spot.region}, ` : ''}{spot.country}</div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-xs text-text-tertiary">No surf spots found nearby</div>
+          )}
+        </div>
+      )}
+
+      {/* Tide sparkline */}
+      {!location.isLand && tideCurve && tideCurve.length > 2 && (
+        <div className="px-5 py-2 border-b border-border shrink-0">
+          <TideSparkline
+            curve={tideCurve}
+            nowMs={Date.now()}
+            width={isMobile ? 300 : 380}
+            height={45}
+          />
+        </div>
+      )}
+
       {/* Loading progress */}
-      {loading && (
+      {!location.isLand && loading && (
         <div className="px-5 py-4 shrink-0">
           <div className="h-1 bg-border rounded-sm overflow-hidden mb-2">
             <div
@@ -329,14 +582,14 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
       )}
 
       {/* Error state */}
-      {error && !loading && (
+      {!location.isLand && error && !loading && (
         <div className="px-5 py-4 text-error text-sm">
           {error}
         </div>
       )}
 
       {/* Forecast list */}
-      <div
+      {!location.isLand && <div
         data-testid="forecast-list"
         className="flex-1 overflow-y-auto px-5 pb-5"
       >
@@ -381,7 +634,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-base font-medium text-text-primary tabular-nums">
-                          {entry.waveHeight}m
+                          {convertWaveHeight(entry.waveHeight, prefs.waveUnit)}{prefs.waveUnit}
                         </span>
                         {primarySwell && (
                           <span className="text-sm text-text-secondary tabular-nums">
@@ -395,27 +648,35 @@ export default function SpotPanel({ location, onClose, onFavoritesChange }: Spot
                         <div className="text-xs text-text-tertiary tabular-nums">
                           {entry.swells.slice(1).map((s, i) => (
                             <div key={i}>
-                              + {s.height}m @ {s.period}s {degreesToCompass(s.direction)}
+                              + {convertWaveHeight(s.height, prefs.waveUnit)}{prefs.waveUnit} @ {s.period}s {degreesToCompass(s.direction)}
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Wind */}
-                    {entry.wind && entry.wind.speed != null && (
-                      <div className="flex items-center gap-1 text-sm text-text-secondary tabular-nums ml-auto shrink-0">
-                        <WindIcon className="h-3 w-3 text-text-tertiary" strokeWidth={1.5} />
-                        {entry.wind.speed} m/s
-                      </div>
-                    )}
+                    {/* Wind + Tide (right side) */}
+                    <div className="flex flex-col items-end gap-0.5 ml-auto shrink-0">
+                      {entry.wind && entry.wind.speed != null && (
+                        <div className="flex items-center gap-1 text-sm text-text-secondary tabular-nums">
+                          <WindIcon className="h-3 w-3 text-text-tertiary" strokeWidth={1.5} />
+                          {convertWindSpeed(entry.wind.speed, prefs.windUnit)} {prefs.windUnit}
+                        </div>
+                      )}
+                      {entry.tideHeight != null && entry.tideState && (
+                        <div className="flex items-center gap-0.5 text-xs text-text-tertiary tabular-nums">
+                          <span>{TIDE_STATE_ARROW[entry.tideState]}</span>
+                          <span>{convertWaveHeight(entry.tideHeight, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

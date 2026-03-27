@@ -11,6 +11,9 @@ import { MapLayer } from './LayerToggle';
 import Button from './ui/Button';
 import { Plus, Minus, AlertTriangle, AlertCircle } from 'lucide-react';
 import { DATA_URLS, SUPABASE_STORAGE_URL } from '@/lib/config';
+import { LAYER_COLORS } from '@/lib/layer-colors';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import { convertWaveHeight, convertWindSpeed, convertTemp, tempUnitLabel, type UserPreferences } from '@/lib/preferences';
 import { Protocol } from 'pmtiles';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
@@ -64,9 +67,14 @@ const LAYER_TO_FILENAME: Record<MapLayer, string> = {
   waveHeight: 'wave-height',
   wavePeriod: 'wave-period',
   wind: 'wind-speed',
+  sst: 'water-temp-daily',
 };
 
 function getRasterUrl(layer: MapLayer, hour: number): string {
+  // SST is a daily raster (no forecast hour suffix)
+  if (layer === 'sst') {
+    return `/data/${LAYER_TO_FILENAME[layer]}.png`;
+  }
   const paddedHour = String(hour).padStart(3, '0');
   return `${SUPABASE_STORAGE_URL}/${LAYER_TO_FILENAME[layer]}-f${paddedHour}.png`;
 }
@@ -83,6 +91,7 @@ const WATER_COLORS: Record<MapLayer, string> = {
   waveHeight: '#C8D8E4',  // soft warm-desaturated blue
   wavePeriod: '#C8D8E4',  // soft warm-desaturated blue
   wind: '#C8D8E4',        // soft warm-desaturated blue
+  sst: '#C8D8E4',         // soft warm-desaturated blue
 };
 
 const BATHYMETRY_LAYER_IDS = [
@@ -111,29 +120,7 @@ function updateWaterColor(mapInstance: maplibregl.Map, layer: MapLayer) {
 // Layer Configurations
 // =============================================================================
 
-// Legend gradients match the actual raster LUT colors from convert-grib-to-geojson.py
-// Direction: "to bottom" = top is max value, bottom is min value
-const LEGEND_CONFIG: Record<MapLayer, {
-  unit: string;
-  gradient: string;
-  labels: string[];
-}> = {
-  waveHeight: {
-    unit: 'm',
-    gradient: 'linear-gradient(to bottom, rgb(15,35,100) 0%, rgb(25,55,130) 25%, rgb(35,75,160) 45%, rgb(50,100,180) 65%, rgb(70,130,200) 80%, rgb(110,155,210) 90%, rgb(150,170,200) 97%, rgb(180,175,168) 100%)',
-    labels: ['15', '12', '9', '6', '3', '0'],
-  },
-  wavePeriod: {
-    unit: 's',
-    gradient: 'linear-gradient(to bottom, rgb(65,40,140) 0%, rgb(95,65,165) 25%, rgb(120,100,180) 50%, rgb(150,140,195) 75%, rgb(165,160,180) 90%, rgb(180,175,168) 100%)',
-    labels: ['25', '20', '15', '10', '5', '0'],
-  },
-  wind: {
-    unit: 'm/s',
-    gradient: 'linear-gradient(to bottom, rgb(15,100,100) 0%, rgb(30,130,125) 25%, rgb(60,155,150) 50%, rgb(120,175,170) 75%, rgb(160,175,172) 90%, rgb(180,175,168) 100%)',
-    labels: ['30', '25', '20', '15', '10', '5', '0'],
-  },
-};
+// Legend config is centralized in lib/layer-colors.ts (single source of truth)
 
 /**
  * Add top-level wavePeriod and windSpeed properties so MapLibre expressions can access them.
@@ -203,7 +190,7 @@ function formatDirectionString(direction: number | null | undefined): string {
   return `from ${direction}° (${degreesToCompass(direction)})`;
 }
 
-function formatBuoyPopup(properties: BuoyFeatureProperties): string {
+function formatBuoyPopup(properties: BuoyFeatureProperties, prefs: UserPreferences): string {
   const name = properties.name || 'Buoy';
   const stationId = properties.station_id || '';
   const timeDisplay = properties.observation_time ? formatTime(properties.observation_time) : 'N/A';
@@ -211,7 +198,7 @@ function formatBuoyPopup(properties: BuoyFeatureProperties): string {
   // Build waves section
   let wavesHtml = '';
   if (properties.wave_height != null) {
-    let waveStr = `${properties.wave_height}m`;
+    let waveStr = `${convertWaveHeight(properties.wave_height, prefs.waveUnit)}${prefs.waveUnit}`;
     if (properties.dominant_period != null) waveStr += ` @ ${properties.dominant_period}s`;
     if (properties.wave_direction != null) {
       waveStr += ` ${formatDirectionString(properties.wave_direction)}`;
@@ -222,7 +209,7 @@ function formatBuoyPopup(properties: BuoyFeatureProperties): string {
   // Build wind section
   let windHtml = '';
   if (properties.wind_speed != null) {
-    let windStr = `${properties.wind_speed} m/s`;
+    let windStr = `${convertWindSpeed(properties.wind_speed, prefs.windUnit)} ${prefs.windUnit}`;
     if (properties.wind_direction != null) {
       windStr += ` ${formatDirectionString(properties.wind_direction)}`;
     }
@@ -233,7 +220,7 @@ function formatBuoyPopup(properties: BuoyFeatureProperties): string {
   // Build water temp section
   let tempHtml = '';
   if (properties.water_temp != null) {
-    tempHtml = popupInlineField('Water:', `${properties.water_temp}°C`);
+    tempHtml = popupInlineField('Water:', `${convertTemp(properties.water_temp, prefs.tempUnit)}${tempUnitLabel(prefs.tempUnit)}`);
   }
 
   // Handle case with no data
@@ -331,13 +318,18 @@ function formatCoordinateLabel(lat: number, lng: number): string {
 interface WaveMapProps {
   onFavoritesChange?: () => void;
   initialSpot?: { lat: number; lng: number; name: string } | null;
+  onClearInitialSpot?: () => void;
   activeLayer: MapLayer;
   showBuoys: boolean;
   showBathymetry: boolean;
   onSpotSelect?: () => void;
 }
 
-export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, showBuoys, showBathymetry, onSpotSelect }: WaveMapProps) {
+export default function WaveMap({ onFavoritesChange, initialSpot, onClearInitialSpot, activeLayer, showBuoys, showBathymetry, onSpotSelect }: WaveMapProps) {
+  const { prefs } = usePreferences();
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
@@ -371,7 +363,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
   useEffect(() => { isMobileRef.current = isMobile; }, [isMobile]);
 
   // Spot panel state
-  const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [selectedSpot, setSelectedSpot] = useState<{ lat: number; lng: number; name: string; isLand?: boolean } | null>(null);
   const selectedSpotRef = useRef(selectedSpot);
   useEffect(() => { selectedSpotRef.current = selectedSpot; }, [selectedSpot]);
 
@@ -393,7 +385,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
     right: 0,
   });
 
-  // Handle initialSpot from navigation
+  // Handle initialSpot from navigation (one-time consumption)
   useEffect(() => {
     if (initialSpot) {
       if (map.current && !previousViewRef.current) {
@@ -404,8 +396,9 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
       if (map.current) {
         map.current.flyTo({ center: [initialSpot.lng, initialSpot.lat], zoom: 6, duration: 2000, padding: getMobilePadding() });
       }
+      onClearInitialSpot?.();
     }
-  }, [initialSpot]);
+  }, [initialSpot, onClearInitialSpot]);
 
   // Restore previous map view when spot is deselected
   useEffect(() => {
@@ -918,7 +911,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
             'buoy',
             selectedPointRef,
             popupTypeRef,
-            (props) => formatBuoyPopup(props as BuoyFeatureProperties)
+            (props) => formatBuoyPopup(props as BuoyFeatureProperties, prefsRef.current)
           );
           setBuoyError(null);
           setBuoyLastUpdated(new Date());
@@ -998,11 +991,32 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
               return;
             }
 
+            const { lng, lat } = e.lngLat;
+
+            // Detect land clicks using the Natural Earth land mask layer
+            const landFeatures = map.current.queryRenderedFeatures(e.point, { layers: ['land-mask-layer'] });
+            const isLand = landFeatures.length > 0;
+
+            if (isLand) {
+              // Land click — open SpotPanel in land mode with nearby spot suggestions
+              if (!previousViewRef.current) {
+                const c = map.current.getCenter();
+                setPreviousView({ center: [c.lng, c.lat], zoom: map.current.getZoom() });
+              }
+              setSelectedSpot({
+                lat,
+                lng,
+                name: formatCoordinateLabel(lat, lng),
+                isLand: true,
+              });
+              return;
+            }
+
             const data = currentDataRef.current;
             if (!data || !data.features.length) return;
 
-            const { lng, lat } = e.lngLat;
-            const nearest = findNearestFeature(data, lat, lng, 4);
+            // Ocean click — find nearest forecast point (no distance limit)
+            const nearest = findNearestFeature(data, lat, lng);
             if (!nearest) return;
 
             // Save current view before zooming in (only if not already saved)
@@ -1157,7 +1171,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
           letterSpacing: '0.05em',
           fontVariantNumeric: 'tabular-nums',
         }}>
-          {LEGEND_CONFIG[activeLayer].unit}
+          {LAYER_COLORS[activeLayer].unit}
         </span>
         <div style={{ display: 'flex', gap: 3 }}>
           <div
@@ -1168,7 +1182,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
               width: 14,
               height: 140,
               borderRadius: 3,
-              background: LEGEND_CONFIG[activeLayer].gradient,
+              background: LAYER_COLORS[activeLayer].legendGradient,
               flexShrink: 0,
             }}
           />
@@ -1179,7 +1193,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
             height: 140,
             padding: '1px 0',
           }}>
-            {LEGEND_CONFIG[activeLayer].labels.map((label, i) => (
+            {LAYER_COLORS[activeLayer].ticks.map((label, i) => (
               <span key={i} style={{
                 fontSize: 9,
                 color: 'rgba(255,255,255,0.6)',
@@ -1216,7 +1230,15 @@ export default function WaveMap({ onFavoritesChange, initialSpot, activeLayer, s
 
       {/* Spot Panel */}
       {selectedSpot && (
-        <SpotPanel location={selectedSpot} onClose={() => setSelectedSpot(null)} onFavoritesChange={onFavoritesChange} />
+        <SpotPanel
+          location={selectedSpot}
+          onClose={() => setSelectedSpot(null)}
+          onFavoritesChange={onFavoritesChange}
+          onSelectSpot={(lat, lng, name) => {
+            setSelectedSpot({ lat, lng, name });
+            map.current?.flyTo({ center: [lng, lat], zoom: 10, duration: 1500 });
+          }}
+        />
       )}
     </div>
   );

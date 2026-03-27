@@ -6,11 +6,13 @@ import NavBar, { View } from '@/components/NavBar';
 import WaveMap from '@/components/WaveMap';
 import LayersPanel from '@/components/LayersPanel';
 import FavoritesPage from '@/components/FavoritesPage';
-import SettingsPlaceholder from '@/components/SettingsPlaceholder';
+import Settings from '@/components/Settings';
 import { MapLayer } from '@/components/LayerToggle';
-import { getFavorites } from '@/lib/favorites';
+import { useAuth } from '@/contexts/AuthContext';
+import { favoritesService } from '@/lib/favorites-service';
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [activeView, setActiveView] = useState<View>('map');
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [initialSpot, setInitialSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
@@ -22,25 +24,33 @@ export default function HomePage() {
   const [showBathymetry, setShowBathymetry] = useState(false);
 
   useEffect(() => {
-    setFavoritesCount(getFavorites().length);
-  }, [activeView]);
+    favoritesService.getFavorites(user?.id || null).then(favs => setFavoritesCount(favs.length));
+  }, [activeView, user]);
 
   const refreshFavoritesCount = useCallback(() => {
-    setFavoritesCount(getFavorites().length);
-  }, []);
+    favoritesService.getFavorites(user?.id || null).then(favs => setFavoritesCount(favs.length));
+  }, [user]);
 
   const handleViewSpot = useCallback((lat: number, lng: number, name: string) => {
     setInitialSpot({ lat, lng, name });
     setActiveView('map');
   }, []);
 
-  // Content area offset: sidebar 72px on desktop, bottom tab 56px on mobile
+  const handleClearInitialSpot = useCallback(() => {
+    setInitialSpot(null);
+  }, []);
+
+  const handleSpotSelect = useCallback(() => {
+    setActiveView('map');
+  }, []);
+
+  // Content area offset: sidebar 72px on desktop, bottom nav 64px + safe area on mobile
   const contentStyle: React.CSSProperties = {
     position: 'fixed',
     top: 0,
     right: 0,
     ...(isMobile
-      ? { left: 0, bottom: 56 }
+      ? { left: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }
       : { left: 72, bottom: 0 }),
   };
 
@@ -57,10 +67,11 @@ export default function HomePage() {
         <WaveMap
           onFavoritesChange={refreshFavoritesCount}
           initialSpot={initialSpot}
+          onClearInitialSpot={handleClearInitialSpot}
           activeLayer={activeLayer}
           showBuoys={showBuoys}
           showBathymetry={showBathymetry}
-          onSpotSelect={() => { if (activeView !== 'map') setActiveView('map'); }}
+          onSpotSelect={handleSpotSelect}
         />
 
         {/* Overlay panels */}
@@ -83,7 +94,7 @@ export default function HomePage() {
           />
         )}
         {activeView === 'settings' && (
-          <SettingsPlaceholder />
+          <Settings />
         )}
       </div>
     </>
