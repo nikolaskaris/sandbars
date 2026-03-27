@@ -4,23 +4,12 @@ import { useEffect, useState } from 'react';
 import { MapPin, Star, X, Wind as WindIcon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { convertWaveHeight, convertWindSpeed } from '@/lib/preferences';
-import {
-  FORECAST_HOURS,
-  SwellData,
-  WindData,
-  WaveFeatureProperties,
-  GeoJSONData,
-  degreesToCompass,
-  parseJsonProperty,
-  findNearestFeature,
-} from '@/lib/wave-utils';
-import { DATA_URLS } from '@/lib/config';
+import { convertWaveHeight, convertWindSpeed, convertTemp, tempUnitLabel } from '@/lib/preferences';
+import { FORECAST_HOURS, degreesToCompass } from '@/lib/wave-utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { favoritesService } from '@/lib/favorites-service';
-import { getTideAtPoint, getTideCurve, TideAtPoint } from '@/lib/tides';
-import { getWaterTempAtPoint, getAirTempAtPoint } from '@/lib/temperature';
-import { convertTemp, tempUnitLabel } from '@/lib/preferences';
+import { TideAtPoint } from '@/lib/tides';
+import { getFullForecast, ForecastAtPoint, ForecastSummary } from '@/lib/forecast';
 import { findNearbySpots, Spot } from '@/lib/spots';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
@@ -33,15 +22,7 @@ interface SpotPanelProps {
   onSelectSpot?: (lat: number, lng: number, name: string) => void;
 }
 
-interface ForecastEntry {
-  forecastHour: number;
-  validTime: string;
-  swells: SwellData[];
-  wind: WindData;
-  waveHeight: number;
-  tideHeight?: number;
-  tideState?: 'rising' | 'falling' | 'high' | 'low';
-}
+// ForecastAtPoint from lib/forecast.ts is used as the entry type
 
 interface TideCurvePoint {
   time: Date;
@@ -52,7 +33,7 @@ interface DayGroup {
   date: string;
   dateLabel: string;
   isToday: boolean;
-  entries: ForecastEntry[];
+  entries: ForecastAtPoint[];
 }
 
 function parseValidTime(validTime: string | undefined): Date | null {
@@ -62,8 +43,8 @@ function parseValidTime(validTime: string | undefined): Date | null {
   return date;
 }
 
-function groupByDay(entries: ForecastEntry[]): DayGroup[] {
-  const groups: Map<string, ForecastEntry[]> = new Map();
+function groupByDay(entries: ForecastAtPoint[]): DayGroup[] {
+  const groups: Map<string, ForecastAtPoint[]> = new Map();
 
   for (const entry of entries) {
     const date = parseValidTime(entry.validTime);
@@ -100,9 +81,9 @@ function groupByDay(entries: ForecastEntry[]): DayGroup[] {
  * quality scoring engine in Phase 5. Provides the visual color signal
  * for forecast row left-border scanning.
  */
-function heuristicQuality(entry: ForecastEntry): 'poor' | 'fair' | 'good' | 'great' | 'epic' {
-  const h = entry.waveHeight;
-  const p = entry.swells[0]?.period ?? 0;
+function heuristicQuality(entry: ForecastAtPoint): 'poor' | 'fair' | 'good' | 'great' | 'epic' {
+  const h = entry.waves.height;
+  const p = entry.waves.swells[0]?.period ?? 0;
   const w = entry.wind?.speed ?? 0;
 
   let score = 0;
@@ -266,7 +247,7 @@ function TideSparkline({
 export default function SpotPanel({ location, onClose, onFavoritesChange, onSelectSpot }: SpotPanelProps) {
   const { prefs } = usePreferences();
   const { user } = useAuth();
-  const [forecasts, setForecasts] = useState<ForecastEntry[]>([]);
+  const [forecasts, setForecasts] = useState<ForecastAtPoint[]>([]);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -280,23 +261,6 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   const [waterTemp, setWaterTemp] = useState<number | null>(null);
   const [airTemp, setAirTemp] = useState<number | null>(null);
 
-  // Load temperature data for this location
-  useEffect(() => {
-    if (location.isLand) return;
-    let cancelled = false;
-
-    Promise.all([
-      getWaterTempAtPoint(location.lat, location.lng),
-      getAirTempAtPoint(location.lat, location.lng),
-    ]).then(([wt, at]) => {
-      if (cancelled) return;
-      setWaterTemp(wt);
-      setAirTemp(at);
-    });
-
-    return () => { cancelled = true; };
-  }, [location.lat, location.lng, location.isLand]);
-
   // Load nearby spots for land clicks
   useEffect(() => {
     if (!location.isLand) return;
@@ -306,28 +270,6 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
     });
     return () => { cancelled = true; };
   }, [location.lat, location.lng, location.isLand]);
-
-  // Load tide data for this location
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadTide() {
-      const now = new Date();
-      const [tideInfo, curve] = await Promise.all([
-        getTideAtPoint(location.lat, location.lng, now),
-        getTideCurve(location.lat, location.lng, now, 12),
-      ]);
-      if (cancelled) return;
-      setCurrentTide(tideInfo);
-      setTideCurve(curve);
-    }
-
-    setCurrentTide(null);
-    setTideCurve(null);
-    loadTide();
-
-    return () => { cancelled = true; };
-  }, [location.lat, location.lng]);
 
   // Check if this location is already favorited (async)
   useEffect(() => {
@@ -383,76 +325,49 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
     });
   };
 
-  // Fetch all forecast hours
+  // Fetch unified forecast (wave, wind, tide, temps — all in one call)
   useEffect(() => {
+    if (location.isLand) {
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
-    const { signal } = controller;
 
     setForecasts([]);
     setProgress(0);
     setLoading(true);
     setError(null);
+    setCurrentTide(null);
+    setTideCurve(null);
+    setWaterTemp(null);
+    setAirTemp(null);
 
-    const entries: ForecastEntry[] = [];
-    let completed = 0;
+    getFullForecast(
+      location.lat,
+      location.lng,
+      controller.signal,
+      (completed) => setProgress(completed)
+    ).then((summary) => {
+      if (controller.signal.aborted) return;
 
-    Promise.all(
-      FORECAST_HOURS.map(async (hour) => {
-        try {
-          const url = DATA_URLS.waveData(hour);
-          const res = await fetch(url, { signal });
-          if (!res.ok) return null;
+      // Set current conditions
+      setCurrentTide(summary.current.tide);
+      setTideCurve(summary.current.tideCurve);
+      setWaterTemp(summary.current.waterTemp);
+      setAirTemp(summary.current.airTemp);
 
-          const data: GeoJSONData<WaveFeatureProperties> = await res.json();
-          const feature = findNearestFeature(data, location.lat, location.lng);
-
-          if (feature && data.metadata) {
-            const swells = parseJsonProperty<SwellData[]>(feature.properties.swells);
-            const wind = parseJsonProperty<WindData>(feature.properties.wind);
-
-            const entry: ForecastEntry = {
-              forecastHour: hour,
-              validTime: data.metadata.valid_time,
-              swells: swells || [],
-              wind: wind || { speed: 0, direction: 0 },
-              waveHeight: feature.properties.waveHeight,
-            };
-
-            // Attach tide data for this forecast time
-            const validDate = new Date(data.metadata.valid_time);
-            if (!isNaN(validDate.getTime())) {
-              const tide = await getTideAtPoint(location.lat, location.lng, validDate);
-              if (tide) {
-                entry.tideHeight = tide.height;
-                entry.tideState = tide.state;
-              }
-            }
-
-            entries.push(entry);
-          }
-        } catch (err) {
-          if ((err as Error).name === 'AbortError') return null;
-          // Skip individual failures
-        } finally {
-          completed++;
-          if (!signal.aborted) {
-            setProgress(completed);
-          }
-        }
-        return null;
-      })
-    ).then(() => {
-      if (signal.aborted) return;
-      entries.sort((a, b) => a.forecastHour - b.forecastHour);
-      setForecasts(entries);
+      // Set per-hour forecasts
+      setForecasts(summary.hours);
       setLoading(false);
-      if (entries.length === 0) {
+
+      if (summary.hours.length === 0) {
         setError('No forecast data available for this location');
       }
     });
 
     return () => controller.abort();
-  }, [location.lat, location.lng]);
+  }, [location.lat, location.lng, location.isLand]);
 
   const days = groupByDay(forecasts);
   const progressPct = (progress / FORECAST_HOURS.length) * 100;
@@ -639,7 +554,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
             {/* Entries for this day */}
             <div className="flex flex-col">
               {day.entries.map((entry) => {
-                const primarySwell = entry.swells[0];
+                const primarySwell = entry.waves.swells[0];
                 const parsedTime = parseValidTime(entry.validTime);
                 const timeStr = parsedTime
                   ? parsedTime.toLocaleTimeString('en-US', {
@@ -665,7 +580,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-base font-medium text-text-primary tabular-nums">
-                          {convertWaveHeight(entry.waveHeight, prefs.waveUnit)}{prefs.waveUnit}
+                          {convertWaveHeight(entry.waves.height, prefs.waveUnit)}{prefs.waveUnit}
                         </span>
                         {primarySwell && (
                           <span className="text-sm text-text-secondary tabular-nums">
@@ -675,9 +590,9 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                       </div>
 
                       {/* Secondary swells */}
-                      {entry.swells.length > 1 && (
+                      {entry.waves.swells.length > 1 && (
                         <div className="text-xs text-text-tertiary tabular-nums">
-                          {entry.swells.slice(1).map((s, i) => (
+                          {entry.waves.swells.slice(1).map((s, i) => (
                             <div key={i}>
                               + {convertWaveHeight(s.height, prefs.waveUnit)}{prefs.waveUnit} @ {s.period}s {degreesToCompass(s.direction)}
                             </div>
@@ -686,7 +601,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                       )}
                     </div>
 
-                    {/* Wind + Tide (right side) */}
+                    {/* Wind + Tide + Temps (right side) */}
                     <div className="flex flex-col items-end gap-0.5 ml-auto shrink-0">
                       {entry.wind && entry.wind.speed != null && (
                         <div className="flex items-center gap-1 text-sm text-text-secondary tabular-nums">
@@ -694,10 +609,15 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                           {convertWindSpeed(entry.wind.speed, prefs.windUnit)} {prefs.windUnit}
                         </div>
                       )}
-                      {entry.tideHeight != null && entry.tideState && (
+                      {entry.tide && (
                         <div className="flex items-center gap-0.5 text-xs text-text-tertiary tabular-nums">
-                          <span>{TIDE_STATE_ARROW[entry.tideState]}</span>
-                          <span>{convertWaveHeight(entry.tideHeight, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}</span>
+                          <span>{TIDE_STATE_ARROW[entry.tide.state]}</span>
+                          <span>{convertWaveHeight(entry.tide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}</span>
+                        </div>
+                      )}
+                      {entry.airTemp != null && (
+                        <div className="text-xs text-text-tertiary tabular-nums">
+                          {convertTemp(entry.airTemp, prefs.tempUnit)}{tempUnitLabel(prefs.tempUnit)}
                         </div>
                       )}
                     </div>

@@ -282,7 +282,52 @@ def generate_raster_pngs(swh, primary_period, ws, forecast_hour, output_dir):
         img.save(png_path, 'PNG', optimize=True)
 
 
-def convert_grib_file(grib_path, output_path, file_num, total_files):
+def load_gfs_air_temp(grib_path):
+    """Try to load GFS 2m air temperature from a companion GRIB file.
+    Returns a 2D array (lat x lon) in °C, or None if unavailable."""
+    if not os.path.exists(grib_path):
+        return None
+    try:
+        datasets = cfgrib.open_datasets(grib_path)
+        for ds in datasets:
+            for var_name in ['t2m', 't']:
+                if var_name in ds.data_vars:
+                    temp_k = ds[var_name].values
+                    return temp_k - 273.15  # Kelvin → Celsius
+        return None
+    except Exception:
+        return None
+
+
+def download_gfs_temp_for_hour(run_date, run_cycle, forecast_hour, output_dir):
+    """Download filtered GFS 2m temperature GRIB for a specific forecast hour.
+    Uses NOMADS filter API to get just TMP at 2m (~500KB per file)."""
+    import urllib.request
+
+    fhour_str = f"{forecast_hour:03d}"
+    output_path = os.path.join(output_dir, f"gfs-tmp2m-f{fhour_str}.grib2")
+
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
+        return output_path
+
+    url = (
+        f"https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?"
+        f"dir=%2Fgfs.{run_date}%2F{run_cycle}%2Fatmos"
+        f"&file=gfs.t{run_cycle}z.pgrb2.0p25.f{fhour_str}"
+        f"&var_TMP=on&lev_2_m_above_ground=on"
+    )
+
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            with open(output_path, 'wb') as f:
+                f.write(response.read())
+        return output_path
+    except Exception:
+        return None
+
+
+def convert_grib_file(grib_path, output_path, file_num, total_files, air_temp_grid=None):
     """Convert a single GRIB file to GeoJSON."""
     filename = os.path.basename(grib_path)
     forecast_hour = extract_forecast_hour(filename)
@@ -370,6 +415,14 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
                     "direction": int(wvdir[lat_idx, lon_idx]) if not np.isnan(wvdir[lat_idx, lon_idx]) else None
                 }
 
+            # Air temperature at this grid point (from GFS, if available)
+            air_temp = None
+            if air_temp_grid is not None:
+                # GFS grid is 721x1440 (same as wave grid), use same indices
+                at_val = air_temp_grid[lat_idx, lon_idx]
+                if not np.isnan(at_val):
+                    air_temp = round(float(at_val), 1)
+
             feature = {
                 "type": "Feature",
                 "geometry": {
@@ -380,7 +433,8 @@ def convert_grib_file(grib_path, output_path, file_num, total_files):
                     "waveHeight": round1(wave_height),
                     "swells": swells,
                     "windWaves": wind_waves,
-                    "wind": wind
+                    "wind": wind,
+                    "airTemp": air_temp
                 }
             }
 
@@ -433,13 +487,38 @@ def main():
     f000_output = None
     failed_files = []
 
+    # Extract model run date/cycle from first GRIB filename for GFS temp downloads
+    # Filename format: gfswave.t{HH}z.global.0p25.f{FFF}.grib2
+    first_filename = os.path.basename(grib_files[0])
+    run_cycle_match = re.search(r'\.t(\d{2})z\.', first_filename)
+    run_cycle = run_cycle_match.group(1) if run_cycle_match else "00"
+
+    # Try to determine run date from GRIB metadata
+    try:
+        test_ds = cfgrib.open_datasets(grib_files[0])
+        run_date = str(test_ds[0].time.values)[:10].replace("-", "")
+    except Exception:
+        run_date = datetime.utcnow().strftime("%Y%m%d")
+
+    gfs_temp_dir = os.path.join("data", "gfs-temp")
+    os.makedirs(gfs_temp_dir, exist_ok=True)
+
+    print(f"\nGFS run: {run_date}/{run_cycle}z")
+    print(f"Downloading GFS 2m temperature for each forecast hour...")
+
     # Process each file
     for i, grib_file in enumerate(grib_files, 1):
         forecast_hour = extract_forecast_hour(grib_file)
         output_file = os.path.join(OUTPUT_DIR, f"wave-data-f{forecast_hour:03d}.geojson")
 
+        # Download GFS air temp for this forecast hour
+        air_temp_grid = None
+        temp_grib_path = download_gfs_temp_for_hour(run_date, run_cycle, forecast_hour, gfs_temp_dir)
+        if temp_grib_path:
+            air_temp_grid = load_gfs_air_temp(temp_grib_path)
+
         try:
-            features_count, fhour = convert_grib_file(grib_file, output_file, i, len(grib_files))
+            features_count, fhour = convert_grib_file(grib_file, output_file, i, len(grib_files), air_temp_grid)
             total_features += features_count
 
             # Track f000 for backward compatibility copy

@@ -63,6 +63,7 @@ export interface WaveFeatureProperties {
   swells: SwellData[] | string;
   windWaves: WindWaveData | string | null;
   wind: WindData | string;
+  airTemp?: number | null;
 }
 
 export interface ForecastMetadata {
