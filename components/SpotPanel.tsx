@@ -11,7 +11,9 @@ import { favoritesService } from '@/lib/favorites-service';
 import { TideAtPoint } from '@/lib/tides';
 import { getFullForecast, ForecastAtPoint, ForecastSummary } from '@/lib/forecast';
 import { findNearbySpots, findNearestSpot, Spot } from '@/lib/spots';
-import { computeQuality, scoreToBorderClass, scoreColor } from '@/lib/quality';
+import { computeQuality, scoreToBorderClass, scoreColor, type QualityScore } from '@/lib/quality';
+import { generateSummary } from '@/lib/summary';
+import QualitySparkline from './QualitySparkline';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
 import Skeleton from './ui/Skeleton';
@@ -388,6 +390,30 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
 
   const days = groupByDay(forecasts);
   const progressPct = (progress / FORECAST_HOURS.length) * 100;
+  const [showDetailedForecast, setShowDetailedForecast] = useState(false);
+
+  // Compute quality scores for sparkline + current summary
+  const qualityScores = forecasts.map((f) => ({
+    time: new Date(f.validTime),
+    score: computeQuality(f, spotMeta).score,
+  }));
+  const currentForecast = forecasts[0] ?? null;
+  const currentQuality = currentForecast ? computeQuality(currentForecast, spotMeta) : null;
+  const currentSummary = currentForecast && currentQuality
+    ? generateSummary(currentForecast, currentQuality, spotMeta, prefs)
+    : null;
+
+  // Best score per day for quality timeline dots
+  const dayQualities = days.map((day) => {
+    const dayScores = day.entries.map((e) => computeQuality(e, spotMeta).score);
+    const best = Math.max(...dayScores);
+    const heights = day.entries.map((e) => e.waves.height);
+    return {
+      date: day.dateLabel,
+      score: best,
+      heightRange: [Math.min(...heights), Math.max(...heights)] as [number, number],
+    };
+  });
 
   return (
     <div
@@ -448,7 +474,17 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
               </>
             )}
           </div>
-          <div className="text-sm text-text-secondary mt-0.5">16-Day Forecast</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-sm text-text-secondary">16-Day Forecast</span>
+            {currentQuality && (
+              <span
+                className="text-xs font-bold tabular-nums px-1.5 py-0.5 rounded"
+                style={{ color: scoreColor(currentQuality.score), backgroundColor: scoreColor(currentQuality.score) + '18' }}
+              >
+                {currentQuality.score.toFixed(1)} {currentQuality.label}
+              </span>
+            )}
+          </div>
           {(currentTide || waterTemp != null || airTemp != null) && (
             <div className="flex items-center gap-1.5 mt-1 text-xs text-text-tertiary flex-wrap">
               {currentTide && (
@@ -570,6 +606,51 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
         </div>
       )}
 
+      {/* Natural language summary */}
+      {!location.isLand && !loading && currentSummary && (
+        <div className="px-5 py-3 border-b border-border shrink-0">
+          <p className="text-xs text-text-secondary leading-relaxed">{currentSummary}</p>
+        </div>
+      )}
+
+      {/* Quality timeline — 7-day dots */}
+      {!location.isLand && !loading && dayQualities.length > 0 && (
+        <div className="px-5 py-3 border-b border-border shrink-0">
+          <div className="flex items-center gap-1 mb-1">
+            {dayQualities.slice(0, 7).map((dq, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: scoreColor(dq.score) }}
+                  title={`${dq.date}: ${dq.score.toFixed(1)}`}
+                />
+                <div className="text-[9px] text-text-tertiary tabular-nums leading-none">
+                  {convertWaveHeight(dq.heightRange[0], prefs.waveUnit)}-{convertWaveHeight(dq.heightRange[1], prefs.waveUnit)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            {dayQualities.slice(0, 7).map((dq, i) => (
+              <div key={i} className="flex-1 text-center text-[8px] text-text-tertiary">
+                {dq.date.slice(0, 3)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 16-day quality sparkline */}
+      {!location.isLand && !loading && qualityScores.length > 2 && (
+        <div className="px-5 py-2 border-b border-border shrink-0">
+          <QualitySparkline
+            scores={qualityScores}
+            width={isMobile ? 300 : 380}
+            height={18}
+          />
+        </div>
+      )}
+
       {/* Loading progress */}
       {!location.isLand && loading && (
         <div className="px-5 py-4 shrink-0">
@@ -602,8 +683,16 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
         </div>
       )}
 
-      {/* Forecast list */}
-      {!location.isLand && <div
+      {/* Detailed forecast toggle + list */}
+      {!location.isLand && !loading && forecasts.length > 0 && (
+        <button
+          onClick={() => setShowDetailedForecast((v) => !v)}
+          className="w-full px-5 py-2.5 text-xs font-medium text-accent hover:bg-surface-secondary transition-colors border-b border-border text-left shrink-0"
+        >
+          {showDetailedForecast ? '▾ Hide detailed forecast' : '▸ View detailed forecast'}
+        </button>
+      )}
+      {!location.isLand && showDetailedForecast && <div
         data-testid="forecast-list"
         className="flex-1 overflow-y-auto px-5 pb-5"
       >
@@ -653,14 +742,20 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                       </div>
                     </div>
 
-                    {/* Wave + swell details */}
+                    {/* Wave + swell details — colored by sub-scores */}
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-base font-medium text-text-primary tabular-nums">
+                        <span
+                          className="text-base font-medium tabular-nums"
+                          style={{ color: scoreColor(quality.sub.swell) }}
+                        >
                           {convertWaveHeight(entry.waves.height, prefs.waveUnit)}{prefs.waveUnit}
                         </span>
                         {primarySwell && (
-                          <span className="text-sm text-text-secondary tabular-nums">
+                          <span
+                            className="text-sm tabular-nums"
+                            style={{ color: scoreColor(quality.sub.period) + 'CC' }}
+                          >
                             @ {primarySwell.period}s {degreesToCompass(primarySwell.direction)}
                           </span>
                         )}
@@ -681,13 +776,19 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                     {/* Wind + Tide + Temps (right side) */}
                     <div className="flex flex-col items-end gap-0.5 ml-auto shrink-0">
                       {entry.wind && entry.wind.speed != null && (
-                        <div className="flex items-center gap-1 text-sm text-text-secondary tabular-nums">
-                          <WindIcon className="h-3 w-3 text-text-tertiary" strokeWidth={1.5} />
+                        <div
+                          className="flex items-center gap-1 text-sm tabular-nums"
+                          style={{ color: scoreColor(quality.sub.wind) + 'CC' }}
+                        >
+                          <WindIcon className="h-3 w-3" strokeWidth={1.5} style={{ opacity: 0.7 }} />
                           {convertWindSpeed(entry.wind.speed, prefs.windUnit)} {prefs.windUnit}
                         </div>
                       )}
                       {entry.tide && (
-                        <div className="flex items-center gap-0.5 text-xs text-text-tertiary tabular-nums">
+                        <div
+                          className="flex items-center gap-0.5 text-xs tabular-nums"
+                          style={{ color: scoreColor(quality.sub.tide) + 'AA' }}
+                        >
                           <span>{TIDE_STATE_ARROW[entry.tide.state]}</span>
                           <span>{convertWaveHeight(entry.tide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}</span>
                         </div>
