@@ -1,9 +1,11 @@
 'use client';
 
-import { Map, Layers, Star, Settings } from 'lucide-react';
+import { Compass, Map, Layers, Star, Settings, LogIn } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
-export type View = 'map' | 'layers' | 'favorites' | 'settings';
+export type View = 'dashboard' | 'map' | 'layers' | 'favorites' | 'settings';
 
 interface NavBarProps {
   activeView: View;
@@ -12,6 +14,7 @@ interface NavBarProps {
 }
 
 const TOP_NAV_ITEMS: { view: View; label: string; icon: typeof Map; testId: string }[] = [
+  { view: 'dashboard', label: 'Home', icon: Compass, testId: 'nav-dashboard' },
   { view: 'map', label: 'Map', icon: Map, testId: 'nav-map' },
   { view: 'layers', label: 'Layers', icon: Layers, testId: 'nav-layers' },
   { view: 'favorites', label: 'Favorites', icon: Star, testId: 'nav-favorites' },
@@ -19,19 +22,76 @@ const TOP_NAV_ITEMS: { view: View; label: string; icon: typeof Map; testId: stri
 
 const BOTTOM_NAV_ITEM = { view: 'settings' as View, label: 'Settings', icon: Settings, testId: 'nav-settings' };
 
+function UserAvatar({ user, size = 28 }: { user: { email?: string; user_metadata?: Record<string, unknown> }; size?: number }) {
+  const avatarUrl = user.user_metadata?.avatar_url as string | undefined;
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        referrerPolicy="no-referrer"
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }}
+      />
+    );
+  }
+
+  const initial = (user.email || '?')[0].toUpperCase();
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: '#C17F5E',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size * 0.46,
+        fontWeight: 600,
+      }}
+    >
+      {initial}
+    </div>
+  );
+}
+
 export default function NavBar({ activeView, onViewChange, favoritesCount }: NavBarProps) {
   const isMobile = useIsMobile();
-
-  const allItems = [...TOP_NAV_ITEMS, BOTTOM_NAV_ITEM];
+  const { user, loading } = useAuth();
+  const router = useRouter();
 
   if (isMobile) {
+    const navItems = [...TOP_NAV_ITEMS, BOTTOM_NAV_ITEM];
+
     return (
       <nav
         data-testid="nav-bar"
         className="fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border flex justify-around items-center z-50 pb-safe"
       >
-        {allItems.map(({ view, label, icon: Icon, testId }) => {
+        {navItems.map(({ view, label, icon: Icon, testId }) => {
           const isActive = activeView === view;
+          const isSettings = view === 'settings';
+
+          // Settings tab: show avatar when logged in
+          if (isSettings && !loading && user) {
+            return (
+              <button
+                key={view}
+                data-testid={testId}
+                onClick={() => onViewChange(view)}
+                className={[
+                  'flex flex-col items-center gap-0.5 bg-transparent border-none cursor-pointer px-4 py-2 relative min-h-[44px] min-w-[44px] justify-center',
+                  isActive ? 'text-accent' : 'text-text-secondary',
+                ].join(' ')}
+              >
+                <UserAvatar user={user} size={22} />
+                <span className={`text-[11px] ${isActive ? 'font-medium' : ''}`}>{label}</span>
+              </button>
+            );
+          }
+
           return (
             <button
               key={view}
@@ -101,8 +161,21 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Settings at bottom */}
-      <div className="w-full pb-4">
+      {/* Bottom section: auth + settings */}
+      <div className="w-full pb-4 flex flex-col items-center gap-1">
+        {/* Sign in link (logged out) */}
+        {!loading && !user && (
+          <button
+            data-testid="nav-sign-in"
+            onClick={() => router.push('/login')}
+            className="flex flex-col items-center gap-1 w-full py-2.5 cursor-pointer bg-transparent border-none text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors duration-150"
+          >
+            <LogIn className="h-5 w-5" strokeWidth={1.5} />
+            <span className="text-[11px] leading-none">Sign in</span>
+          </button>
+        )}
+
+        {/* Settings button — show avatar when logged in */}
         <button
           data-testid={BOTTOM_NAV_ITEM.testId}
           onClick={() => onViewChange(BOTTOM_NAV_ITEM.view)}
@@ -116,7 +189,11 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
           {activeView === 'settings' && (
             <div className="absolute left-0 top-1 bottom-1 w-[3px] bg-accent rounded-r-full" />
           )}
-          <Settings className="h-5 w-5" strokeWidth={1.5} />
+          {!loading && user ? (
+            <UserAvatar user={user} size={28} />
+          ) : (
+            <Settings className="h-5 w-5" strokeWidth={1.5} />
+          )}
           <span className={`text-[11px] leading-none ${activeView === 'settings' ? 'font-medium' : ''}`}>Settings</span>
         </button>
       </div>

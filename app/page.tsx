@@ -6,6 +6,7 @@ import NavBar, { View } from '@/components/NavBar';
 import WaveMap from '@/components/WaveMap';
 import LayersPanel from '@/components/LayersPanel';
 import FavoritesPage from '@/components/FavoritesPage';
+import Dashboard from '@/components/Dashboard';
 import Settings from '@/components/Settings';
 import { MapLayer } from '@/components/LayerToggle';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +14,7 @@ import { favoritesService } from '@/lib/favorites-service';
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [activeView, setActiveView] = useState<View>('map');
+  const [activeView, setActiveView] = useState<View>('dashboard');
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [initialSpot, setInitialSpot] = useState<{ lat: number; lng: number; name: string } | null>(null);
   const isMobile = useIsMobile();
@@ -91,6 +92,12 @@ export default function HomePage() {
             onViewSpot={handleViewSpot}
             onFavoritesChange={refreshFavoritesCount}
             onClose={() => setActiveView('map')}
+          />
+        )}
+        {activeView === 'dashboard' && (
+          <Dashboard
+            onViewSpot={handleViewSpot}
+            onNavigateToMap={() => setActiveView('map')}
           />
         )}
         {activeView === 'settings' && (
