@@ -72,4 +72,15 @@ export const LAYER_COLORS: Record<MapLayer, LayerColorConfig> = {
     primaryColor: 'rgb(180,65,50)',
     baseColor: 'rgb(140,155,175)',
   },
+  airTemp: {
+    label: 'Air Temp',
+    unit: '°C',
+    min: -10,
+    max: 45,
+    ticks: ['45', '37', '28', '20', '12', '4', '-10'],
+    // Python: (120,140,180) → (80,130,190) → (50,150,165) → (70,170,120) → (130,185,80) → (190,175,55) → (210,130,50) → (190,60,45)
+    legendGradient: 'linear-gradient(to bottom, rgb(190,60,45), rgb(210,130,50), rgb(190,175,55), rgb(130,185,80), rgb(70,170,120), rgb(50,150,165), rgb(80,130,190), rgb(120,140,180))',
+    primaryColor: 'rgb(190,60,45)',
+    baseColor: 'rgb(120,140,180)',
+  },
 };

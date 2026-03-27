@@ -68,11 +68,14 @@ const LAYER_TO_FILENAME: Record<MapLayer, string> = {
   wavePeriod: 'wave-period',
   wind: 'wind-speed',
   sst: 'water-temp-daily',
+  airTemp: 'air-temp-daily',
 };
 
+// Daily layers don't change with forecast hour
+const DAILY_LAYERS: Set<MapLayer> = new Set(['sst', 'airTemp']);
+
 function getRasterUrl(layer: MapLayer, hour: number): string {
-  // SST is a daily raster (no forecast hour suffix)
-  if (layer === 'sst') {
+  if (DAILY_LAYERS.has(layer)) {
     return `/data/${LAYER_TO_FILENAME[layer]}.png`;
   }
   const paddedHour = String(hour).padStart(3, '0');
@@ -88,10 +91,11 @@ const RASTER_BOUNDS: [[number, number], [number, number], [number, number], [num
 ];
 
 const WATER_COLORS: Record<MapLayer, string> = {
-  waveHeight: '#C8D8E4',  // soft warm-desaturated blue
-  wavePeriod: '#C8D8E4',  // soft warm-desaturated blue
-  wind: '#C8D8E4',        // soft warm-desaturated blue
-  sst: '#C8D8E4',         // soft warm-desaturated blue
+  waveHeight: '#C8D8E4',
+  wavePeriod: '#C8D8E4',
+  wind: '#C8D8E4',
+  sst: '#C8D8E4',
+  airTemp: '#C8D8E4',
 };
 
 const BATHYMETRY_LAYER_IDS = [

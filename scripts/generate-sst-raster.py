@@ -15,6 +15,7 @@ Requires:
 """
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -264,8 +265,36 @@ def main():
     img.save(png_path, 'PNG', optimize=True)
 
     size_kb = os.path.getsize(png_path) / 1024
+
+    # Also save a compact JSON grid for client-side value lookup
+    # Downsample to 2° intervals (90×180 points, ~30KB)
+    step = 8  # 0.25° × 8 = 2°
+    # sst_shifted is in equirectangular: (720, 1440), north at top, -180 to +180
+    grid_data = sst_shifted[::step, ::step]  # (90, 180)
+    grid_lats = np.linspace(89.875, -89.875, 720)[::step]  # north to south
+    grid_lons = np.linspace(-179.875, 179.875, 1440)[::step]
+
+    # Replace NaN with null-safe value (-999)
+    grid_clean = np.where(np.isnan(grid_data), -999, np.round(grid_data, 1))
+
+    sst_grid = {
+        "lat_start": float(grid_lats[0]),
+        "lat_step": float(grid_lats[1] - grid_lats[0]),  # negative (north→south)
+        "lng_start": float(grid_lons[0]),
+        "lng_step": float(grid_lons[1] - grid_lons[0]),
+        "rows": len(grid_lats),
+        "cols": len(grid_lons),
+        "data": grid_clean.tolist(),
+    }
+
+    grid_path = os.path.join(args.output_dir, "water-temp-grid.json")
+    with open(grid_path, "w") as f:
+        json.dump(sst_grid, f, separators=(",", ":"))
+
+    grid_kb = os.path.getsize(grid_path) / 1024
     print(f"\n=== DONE ===")
-    print(f"  Output: {png_path} ({size_kb:.0f} KB)")
+    print(f"  Raster: {png_path} ({size_kb:.0f} KB)")
+    print(f"  Grid:   {grid_path} ({grid_kb:.0f} KB)")
     print(f"  Date: {date_str}")
     print(f"  Dimensions: {PNG_WIDTH}x{PNG_HEIGHT}")
 

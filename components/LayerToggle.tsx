@@ -1,8 +1,8 @@
 'use client';
 
-import { Waves, Timer, Wind, Thermometer } from 'lucide-react';
+import { Waves, Timer, Wind, Thermometer, Sun } from 'lucide-react';
 
-export type MapLayer = 'waveHeight' | 'wavePeriod' | 'wind' | 'sst';
+export type MapLayer = 'waveHeight' | 'wavePeriod' | 'wind' | 'sst' | 'airTemp';
 
 interface LayerToggleProps {
   activeLayer: MapLayer;
@@ -14,6 +14,7 @@ const LAYERS: { id: MapLayer; label: string; icon: typeof Waves }[] = [
   { id: 'wavePeriod', label: 'Period', icon: Timer },
   { id: 'wind', label: 'Wind', icon: Wind },
   { id: 'sst', label: 'Water', icon: Thermometer },
+  { id: 'airTemp', label: 'Air', icon: Sun },
 ];
 
 export default function LayerToggle({ activeLayer, onChange }: LayerToggleProps) {

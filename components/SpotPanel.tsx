@@ -19,6 +19,8 @@ import { DATA_URLS } from '@/lib/config';
 import { useAuth } from '@/contexts/AuthContext';
 import { favoritesService } from '@/lib/favorites-service';
 import { getTideAtPoint, getTideCurve, TideAtPoint } from '@/lib/tides';
+import { getWaterTempAtPoint, getAirTempAtPoint } from '@/lib/temperature';
+import { convertTemp, tempUnitLabel } from '@/lib/preferences';
 import { findNearbySpots, Spot } from '@/lib/spots';
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
@@ -275,6 +277,25 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   const [currentTide, setCurrentTide] = useState<TideAtPoint | null>(null);
   const [tideCurve, setTideCurve] = useState<TideCurvePoint[] | null>(null);
   const [nearbySpots, setNearbySpots] = useState<Spot[]>([]);
+  const [waterTemp, setWaterTemp] = useState<number | null>(null);
+  const [airTemp, setAirTemp] = useState<number | null>(null);
+
+  // Load temperature data for this location
+  useEffect(() => {
+    if (location.isLand) return;
+    let cancelled = false;
+
+    Promise.all([
+      getWaterTempAtPoint(location.lat, location.lng),
+      getAirTempAtPoint(location.lat, location.lng),
+    ]).then(([wt, at]) => {
+      if (cancelled) return;
+      setWaterTemp(wt);
+      setAirTemp(at);
+    });
+
+    return () => { cancelled = true; };
+  }, [location.lat, location.lng, location.isLand]);
 
   // Load nearby spots for land clicks
   useEffect(() => {
@@ -469,16 +490,26 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
             <span className="text-lg font-medium text-text-primary truncate">{location.name}</span>
           </div>
           <div className="text-sm text-text-secondary mt-0.5">16-Day Forecast</div>
-          {currentTide && (
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-text-tertiary">
-              <span className="text-text-secondary font-medium tabular-nums">
-                {convertWaveHeight(currentTide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}
-              </span>
-              <span>{TIDE_STATE_ARROW[currentTide.state]} {TIDE_STATE_LABEL[currentTide.state]}</span>
-              {currentTide.nextHigh && (
-                <span>
-                  · High {currentTide.nextHigh.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                </span>
+          {(currentTide || waterTemp != null || airTemp != null) && (
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-text-tertiary flex-wrap">
+              {currentTide && (
+                <>
+                  <span className="text-text-secondary font-medium tabular-nums">
+                    {convertWaveHeight(currentTide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}
+                  </span>
+                  <span>{TIDE_STATE_ARROW[currentTide.state]} {TIDE_STATE_LABEL[currentTide.state]}</span>
+                  {currentTide.nextHigh && (
+                    <span>
+                      · High {currentTide.nextHigh.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                    </span>
+                  )}
+                </>
+              )}
+              {waterTemp != null && (
+                <span>{currentTide ? '·' : ''} Water {convertTemp(waterTemp, prefs.tempUnit)}{tempUnitLabel(prefs.tempUnit)}</span>
+              )}
+              {airTemp != null && (
+                <span>· Air {convertTemp(airTemp, prefs.tempUnit)}{tempUnitLabel(prefs.tempUnit)}</span>
               )}
             </div>
           )}
