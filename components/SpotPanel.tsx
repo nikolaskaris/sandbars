@@ -273,15 +273,19 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
       setShowNameInput(true);
     } else {
       // Save with custom name (or catalog name)
-      await favoritesService.addFavorite(user?.id || null, {
+      const ok = await favoritesService.addFavorite(user?.id || null, {
         name: location.name,
         lat: location.lat,
         lng: location.lng,
         customName: showNameInput && customName.trim() ? customName.trim() : undefined,
       });
-      setSaved(true);
-      setShowNameInput(false);
-      setToast('Saved!');
+      if (ok) {
+        setSaved(true);
+        setShowNameInput(false);
+        setToast('Saved!');
+      } else {
+        setToast('Failed to save');
+      }
       onFavoritesChange?.();
       setTimeout(() => setToast(null), 2000);
     }
