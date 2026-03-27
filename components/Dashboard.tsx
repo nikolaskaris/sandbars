@@ -33,6 +33,7 @@ export default function Dashboard({ onViewSpot, onNavigateToMap }: DashboardProp
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [topRec, setTopRec] = useState<SessionRecommendation | null>(null);
   const [spotForecasts, setSpotForecasts] = useState<SpotForecast[]>([]);
+  const [hasFavorites, setHasFavorites] = useState(true); // assume true to avoid empty flash
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +42,10 @@ export default function Dashboard({ onViewSpot, onNavigateToMap }: DashboardProp
       setLoading(true);
       const favorites = await favoritesService.getFavorites(user?.id || null);
 
-      if (cancelled || favorites.length === 0) {
+      if (cancelled) return;
+      setHasFavorites(favorites.length > 0);
+
+      if (favorites.length === 0) {
         setLoading(false);
         return;
       }
@@ -78,8 +82,8 @@ export default function Dashboard({ onViewSpot, onNavigateToMap }: DashboardProp
   return (
     <div className={
       isMobile
-        ? 'fixed inset-0 bottom-16 bg-background overflow-y-auto z-10 pb-safe'
-        : 'absolute inset-0 bg-background overflow-y-auto'
+        ? 'fixed inset-0 bottom-16 bg-background overflow-y-auto z-40 pb-safe'
+        : 'absolute inset-0 bg-background overflow-y-auto z-40'
     }>
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Header */}
@@ -99,7 +103,7 @@ export default function Dashboard({ onViewSpot, onNavigateToMap }: DashboardProp
         )}
 
         {/* Empty state */}
-        {!loading && spotForecasts.length === 0 && (
+        {!loading && !hasFavorites && (
           <div className="text-center py-12">
             <Star className="h-10 w-10 text-text-tertiary mx-auto mb-3" strokeWidth={1} />
             <div className="text-text-secondary font-medium mb-1">No saved spots yet</div>
@@ -160,7 +164,7 @@ export default function Dashboard({ onViewSpot, onNavigateToMap }: DashboardProp
                   : '';
                 const bestNote = sf.bestWindow
                   ? `best ${formatTimeWindow(sf.bestWindow)}`
-                  : 'no good windows';
+                  : '';
 
                 return (
                   <button

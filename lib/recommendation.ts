@@ -50,7 +50,7 @@ export interface SpotForecast {
 // Core
 // =============================================================================
 
-const MIN_WINDOW_SCORE = 4.5; // Minimum score to consider a window "worth it"
+const MIN_WINDOW_SCORE = 3.5; // Minimum score to consider a window "worth checking"
 const MIN_WINDOW_HOURS = 2;   // Minimum contiguous hours for a session
 
 /**
@@ -244,8 +244,9 @@ export function formatRecommendation(
   const heightStr = hLow === hHigh ? `${hLow}${waveUnit}` : `${hLow}-${hHigh}${waveUnit}`;
 
   const parts = [
-    `${heightStr}, ${s.period}s ${s.swellDir} swell`,
-    s.windDesc === 'glass' ? 'glass' : `${s.windDesc}`,
+    `${heightStr}`,
+    `${s.period}s ${s.swellDir} swell`,
+    s.windDesc !== 'glass' && s.windDesc !== 'light' ? s.windDesc : null,
     s.tideState !== 'unknown' ? `${s.tideState} tide` : null,
   ].filter(Boolean);
 
