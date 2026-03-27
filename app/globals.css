@@ -16,6 +16,11 @@ body {
   outline: none;
 }
 
+/* iOS safe area inset for bottom nav */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Ensure map fills viewport */
 .maplibregl-map {
   font-family: inherit;

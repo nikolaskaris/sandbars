@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { SwellData, WindData, WindWaveData } from '@/lib/wave-utils';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import { convertWaveHeight, convertWindSpeed } from '@/lib/preferences';
 
 const SWELL_COLORS = ['#f59e0b', '#22c55e'];
 const WIND_WAVE_COLOR = '#8b5cf6';
@@ -17,6 +19,7 @@ interface VectorOverlayProps {
 }
 
 export default function VectorOverlay({ map, location, swells, windWaves, wind }: VectorOverlayProps) {
+  const { prefs } = usePreferences();
   const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
 
   const updatePosition = useCallback(() => {
@@ -55,14 +58,14 @@ export default function VectorOverlay({ map, location, swells, windWaves, wind }
       arrows.push({
         angle: s.direction,
         color: SWELL_COLORS[i],
-        label: `Swell: ${s.height}m @ ${s.period}s`,
+        label: `Swell: ${convertWaveHeight(s.height, prefs.waveUnit)}${prefs.waveUnit} @ ${s.period}s`,
       });
     }
   } else if (windWaves && windWaves.height >= 0.1 && windWaves.direction != null) {
     arrows.push({
       angle: windWaves.direction,
       color: WIND_WAVE_COLOR,
-      label: `Local waves: ${windWaves.height}m${windWaves.period ? ` @ ${windWaves.period}s` : ''}`,
+      label: `Local waves: ${convertWaveHeight(windWaves.height, prefs.waveUnit)}${prefs.waveUnit}${windWaves.period ? ` @ ${windWaves.period}s` : ''}`,
     });
   }
 
@@ -70,7 +73,7 @@ export default function VectorOverlay({ map, location, swells, windWaves, wind }
     arrows.push({
       angle: wind.direction,
       color: WIND_COLOR,
-      label: `Wind: ${wind.speed} m/s`,
+      label: `Wind: ${convertWindSpeed(wind.speed, prefs.windUnit)} ${prefs.windUnit}`,
     });
   }
 

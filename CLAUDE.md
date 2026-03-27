@@ -92,6 +92,43 @@ sandbars/
 | `components/WaveMap.tsx` | Core map logic, data fetching |
 | `app/page.tsx` | App state, view switching, callbacks |
 
+## Surf Spot Catalog
+
+Global spot database seeded from OpenStreetMap (`sport=surfing`). Tables in Supabase:
+
+- **spots** — `id`, `name`, `slug`, `lat`, `lng`, `region`, `country`, `source` (osm/user), `metadata` (JSONB)
+- **user_favorites** — `user_id` + `spot_id` join table with RLS
+
+**Re-seed from OSM:**
+```bash
+pip3 install supabase python-slugify
+export SUPABASE_SERVICE_KEY=<service_role key from Dashboard>
+python3 scripts/seed-spots-from-osm.py /tmp/osm-surf-spots.json
+# Or download fresh: python3 scripts/seed-spots-from-osm.py --download
+```
+
+**Frontend utilities:** `lib/spots.ts` — `searchSpots()`, `getSpotBySlug()`, `findNearestSpot()`, `createCustomSpot()`
+
+**Migration:** `supabase/migrations/004_create_spots.sql`
+
+## Tide Predictions
+
+Pre-computed tide heights for all spots using pyTMD + NASA GOT4.10c tidal model.
+
+**Run:**
+```bash
+pip3 install pyTMD h5py dask supabase
+export SUPABASE_SERVICE_KEY=<service_role key>
+python3 scripts/compute-tide-predictions.py --days 30
+# Single spot test: --spot-slug pipeline --days 7
+```
+
+- Model: GOT4.10c (auto-downloads ~200MB on first run to `~/.cache/pytmd/`)
+- Storage: 720 hourly values per spot per 30 days (~6KB each, ~1.4MB total)
+- Re-run weekly or when new spots are added
+- Frontend: `lib/tides.ts` — `getTidePrediction()`, `getTideAtTime()`, `getTideState()`, `getNextTides()`
+- Migration: `supabase/migrations/006_create_tide_predictions.sql`
+
 ## Data Pipeline
 
 - **Schedule:** Runs 4h after NOAA model runs (4:00, 10:00, 16:00, 22:00 UTC)

@@ -1,3 +1,8 @@
+/**
+ * @deprecated Use lib/favorites-service.ts instead.
+ * This file is kept for backward compatibility during migration.
+ */
+
 const STORAGE_KEY = 'sandbars_favorites';
 
 export interface Favorite {
