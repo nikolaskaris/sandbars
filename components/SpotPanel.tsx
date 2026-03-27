@@ -218,6 +218,8 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
   const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('half');
   const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [customName, setCustomName] = useState('');
   const [currentTide, setCurrentTide] = useState<TideAtPoint | null>(null);
   const [tideCurve, setTideCurve] = useState<TideCurvePoint[] | null>(null);
   const [nearbySpots, setNearbySpots] = useState<Spot[]>([]);
@@ -250,27 +252,39 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
     favoritesService.isFavorited(user?.id || null, location.lat, location.lng).then(setSaved);
   }, [user, location.lat, location.lng]);
 
+  // Detect if this is a custom (non-catalog) spot by checking if name looks like coordinates
+  const isCustomSpot = !spotMeta || /^\d/.test(location.name) || location.name.includes('°');
+
   const handleToggleFavorite = async () => {
     if (saved) {
-      // Find the favorite to get its ID for removal
       const favs = await favoritesService.getFavorites(user?.id || null);
       const fav = favs.find(
         f => Math.abs(f.lat - location.lat) < 0.001 && Math.abs(f.lng - location.lng) < 0.001
       );
       if (fav) await favoritesService.removeFavorite(user?.id || null, fav.id);
       setSaved(false);
+      setShowNameInput(false);
       setToast('Removed');
+      onFavoritesChange?.();
+      setTimeout(() => setToast(null), 2000);
+    } else if (isCustomSpot && !showNameInput) {
+      // Show name input for custom spots
+      setCustomName('');
+      setShowNameInput(true);
     } else {
+      // Save with custom name (or catalog name)
       await favoritesService.addFavorite(user?.id || null, {
         name: location.name,
         lat: location.lat,
         lng: location.lng,
+        customName: showNameInput && customName.trim() ? customName.trim() : undefined,
       });
       setSaved(true);
+      setShowNameInput(false);
       setToast('Saved!');
+      onFavoritesChange?.();
+      setTimeout(() => setToast(null), 2000);
     }
-    onFavoritesChange?.();
-    setTimeout(() => setToast(null), 2000);
   };
 
   // Prevent body scroll when sheet is fully expanded on mobile
@@ -424,6 +438,30 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
           <X className="h-4 w-4" strokeWidth={1.5} />
         </IconButton>
       </div>
+
+      {/* Name input for custom spots */}
+      {showNameInput && (
+        <div className="px-5 py-3 border-b border-border bg-surface-secondary shrink-0">
+          <label className="text-xs text-text-tertiary mb-1 block">Name this spot</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleToggleFavorite(); }}
+              placeholder="My secret spot..."
+              autoFocus
+              className="flex-1 text-sm px-2.5 py-1.5 rounded border border-border bg-surface text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+            />
+            <Button size="sm" variant="primary" onClick={handleToggleFavorite}>
+              Save
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setShowNameInput(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

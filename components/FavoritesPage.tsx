@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Star, MapPin, Wind, Trash2, X } from 'lucide-react';
-import { getFavorites, removeFavorite, Favorite } from '@/lib/favorites';
+import { Star, MapPin, Wind, Trash2, X, Pencil, Check } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { favoritesService, type Favorite } from '@/lib/favorites-service';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import { convertWaveHeight, convertWindSpeed } from '@/lib/preferences';
 import {
   SwellData,
   WindData,
@@ -32,6 +35,8 @@ interface FavoriteConditions {
 }
 
 export default function FavoritesPage({ onViewSpot, onFavoritesChange, onClose }: FavoritesPageProps) {
+  const { prefs } = usePreferences();
+  const { user } = useAuth();
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [conditions, setConditions] = useState<Map<string, FavoriteConditions>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -39,21 +44,24 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange, onClose }
 
   useEffect(() => {
     const controller = new AbortController();
+    let cancelled = false;
 
-    const favs = getFavorites();
-    setFavorites(favs);
+    async function load() {
+      const favs = await favoritesService.getFavorites(user?.id || null);
+      if (cancelled) return;
+      setFavorites(favs);
 
-    if (favs.length === 0) {
-      setLoading(false);
-      return;
-    }
+      if (favs.length === 0) {
+        setLoading(false);
+        return;
+      }
 
-    fetch(DATA_URLS.waveData(0), { signal: controller.signal })
-      .then(r => {
+      try {
+        const r = await fetch(DATA_URLS.waveData(0), { signal: controller.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data: GeoJSONData<WaveFeatureProperties>) => {
+        const data: GeoJSONData<WaveFeatureProperties> = await r.json();
+        if (cancelled) return;
+
         const condMap = new Map<string, FavoriteConditions>();
 
         for (const fav of favs) {
@@ -66,33 +74,49 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange, onClose }
             condMap.set(fav.id, {
               waveHeight: feature.properties.waveHeight,
               swellSummary: primary
-                ? `${primary.height}m @ ${primary.period}s from ${degreesToCompass(primary.direction)}`
+                ? `${convertWaveHeight(primary.height, prefs.waveUnit)}${prefs.waveUnit} @ ${primary.period}s from ${degreesToCompass(primary.direction)}`
                 : 'No swell data',
               windSummary: wind?.speed != null
-                ? `${wind.speed} m/s ${degreesToCompass(wind.direction)}`
+                ? `${convertWindSpeed(wind.speed, prefs.windUnit)} ${prefs.windUnit} ${degreesToCompass(wind.direction)}`
                 : 'No wind data',
             });
           }
         }
 
         setConditions(condMap);
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError') {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') {
           console.error('Failed to load conditions for favorites:', err);
         }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-    return () => controller.abort();
-  }, []);
+    load();
 
-  const handleRemove = (id: string) => {
-    removeFavorite(id);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, prefs.waveUnit, prefs.windUnit]);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const handleRemove = async (id: string) => {
+    await favoritesService.removeFavorite(user?.id || null, id);
     setFavorites(prev => prev.filter(f => f.id !== id));
     onFavoritesChange?.();
+  };
+
+  const handleRename = async (id: string) => {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    await favoritesService.renameFavorite(user?.id || null, id, trimmed);
+    setFavorites(prev => prev.map(f => f.id === id ? { ...f, name: trimmed } : f));
+    setEditingId(null);
   };
 
   const content = (
@@ -153,14 +177,39 @@ export default function FavoritesPage({ onViewSpot, onFavoritesChange, onClose }
               <Card key={fav.id} data-testid="favorite-item">
                 <div className="flex items-center gap-1.5 mb-2">
                   <MapPin className="h-3.5 w-3.5 text-text-tertiary shrink-0" strokeWidth={1.5} />
-                  <span className="text-sm font-medium text-text-primary truncate">{fav.name}</span>
+                  {editingId === fav.id ? (
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRename(fav.id); if (e.key === 'Escape') setEditingId(null); }}
+                        autoFocus
+                        className="flex-1 text-sm px-1.5 py-0.5 rounded border border-accent bg-surface text-text-primary focus:outline-none min-w-0"
+                      />
+                      <button onClick={() => handleRename(fav.id)} className="text-accent hover:text-accent-hover p-0.5">
+                        <Check className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium text-text-primary truncate">{fav.name}</span>
+                      <button
+                        onClick={() => { setEditingId(fav.id); setEditName(fav.name); }}
+                        className="text-text-tertiary hover:text-text-secondary p-0.5 shrink-0"
+                        aria-label={`Rename ${fav.name}`}
+                      >
+                        <Pencil className="h-3 w-3" strokeWidth={1.5} />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {cond ? (
                   <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-xl font-medium text-text-primary tabular-nums">
-                        {cond.waveHeight}m
+                        {convertWaveHeight(cond.waveHeight, prefs.waveUnit)}{prefs.waveUnit}
                       </span>
                       <span className="text-xs text-text-secondary truncate">{cond.swellSummary}</span>
                     </div>
