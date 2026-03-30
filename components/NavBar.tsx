@@ -10,7 +10,7 @@ export type View = 'dashboard' | 'map' | 'layers' | 'favorites' | 'settings';
 interface NavBarProps {
   activeView: View;
   onViewChange: (view: View) => void;
-  favoritesCount: number;
+  favoritesCount?: number;
 }
 
 const TOP_NAV_ITEMS: { view: View; label: string; icon: typeof Map; testId: string }[] = [
@@ -104,11 +104,6 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
             >
               <Icon className="h-5 w-5" strokeWidth={1.5} />
               <span className={`text-[11px] ${isActive ? 'font-medium' : ''}`}>{label}</span>
-              {view === 'favorites' && favoritesCount > 0 && (
-                <span className="absolute top-0.5 right-1 bg-accent text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-medium">
-                  {favoritesCount}
-                </span>
-              )}
             </button>
           );
         })}
@@ -148,11 +143,6 @@ export default function NavBar({ activeView, onViewChange, favoritesCount }: Nav
               )}
               <Icon className="h-5 w-5" strokeWidth={1.5} />
               <span className={`text-[11px] leading-none ${isActive ? 'font-medium' : ''}`}>{label}</span>
-              {view === 'favorites' && favoritesCount > 0 && (
-                <span className="absolute top-1 right-2 bg-accent text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-medium">
-                  {favoritesCount}
-                </span>
-              )}
             </button>
           );
         })}
