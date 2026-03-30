@@ -238,32 +238,63 @@ function findBestWindow(
   };
 }
 
+// Practical surfing hours: 6 AM to 7 PM local time
+const EARLIEST_SURF_HOUR = 6;
+const LATEST_SURF_HOUR = 19;
+
 /**
- * Narrow a wide window down to the best ~2-6 hour peak block.
- * Uses a sliding window to find the highest average-score sub-block.
+ * Filter forecast hours to daylight surfing hours only (6 AM - 7 PM local).
+ */
+function filterDaylightHours<T extends { validTime: string }>(hours: T[]): T[] {
+  return hours.filter((h) => {
+    const localHour = new Date(h.validTime).getHours();
+    return localHour >= EARLIEST_SURF_HOUR && localHour < LATEST_SURF_HOUR;
+  });
+}
+
+/**
+ * Narrow a wide window to the best 1-2 forecast step session (~3-6 hours).
+ *
+ * Strategy:
+ * 1. Filter to daylight hours only (6 AM - 7 PM)
+ * 2. Find the single best scoring hour as the anchor
+ * 3. Extend to the adjacent hour if it's also good (score within 80% of peak)
+ * 4. Cap at 2 forecast steps (max ~6 hours)
  */
 function narrowToPeakWindow<T extends { quality: { score: number }; validTime: string }>(
   windowHours: T[],
   _scores: Array<{ time: Date; score: number }>
 ): T[] {
-  if (windowHours.length <= 3) return windowHours;
+  // Step 1: filter to daylight
+  const daylight = filterDaylightHours(windowHours);
+  if (daylight.length === 0) return windowHours.slice(0, 1); // fallback to first hour
+  if (daylight.length === 1) return daylight;
 
-  // Target window size: 2-3 forecast steps (6-9 hours at 3hr resolution)
-  const targetSize = Math.min(3, windowHours.length);
-
-  let bestStart = 0;
-  let bestAvg = 0;
-
-  for (let i = 0; i <= windowHours.length - targetSize; i++) {
-    const slice = windowHours.slice(i, i + targetSize);
-    const avg = slice.reduce((s, h) => s + h.quality.score, 0) / targetSize;
-    if (avg > bestAvg) {
-      bestAvg = avg;
-      bestStart = i;
+  // Step 2: find the peak hour
+  let peakIdx = 0;
+  for (let i = 1; i < daylight.length; i++) {
+    if (daylight[i].quality.score > daylight[peakIdx].quality.score) {
+      peakIdx = i;
     }
   }
 
-  return windowHours.slice(bestStart, bestStart + targetSize);
+  const peakScore = daylight[peakIdx].quality.score;
+  const threshold = peakScore * 0.8; // adjacent hour must be within 80% of peak
+
+  // Step 3: expand from peak to adjacent good hours (max 2 total = ~6hr)
+  let start = peakIdx;
+  let end = peakIdx;
+
+  // Try extending backward
+  if (start > 0 && daylight[start - 1].quality.score >= threshold) {
+    start--;
+  }
+  // Try extending forward (only if we haven't already expanded to 2)
+  if (end - start < 1 && end < daylight.length - 1 && daylight[end + 1].quality.score >= threshold) {
+    end++;
+  }
+
+  return daylight.slice(start, end + 1);
 }
 
 // =============================================================================
@@ -298,7 +329,13 @@ export function formatRecommendation(
 export function formatTimeWindow(rec: SessionRecommendation): string {
   const now = new Date();
   const start = rec.startTime;
-  const end = rec.endTime;
+  // End time = last forecast step + 3 hours (each step covers a 3hr period)
+  const end = new Date(rec.endTime.getTime() + 3 * 3600000);
+
+  // Cap end time at sunset (7 PM)
+  const sunset = new Date(end);
+  sunset.setHours(LATEST_SURF_HOUR, 0, 0, 0);
+  const displayEnd = end > sunset ? sunset : end;
 
   const isToday = start.toDateString() === now.toDateString();
   const isTomorrow = start.toDateString() === new Date(now.getTime() + 86400000).toDateString();
@@ -306,7 +343,7 @@ export function formatTimeWindow(rec: SessionRecommendation): string {
   const dayStr = isToday ? 'today' : isTomorrow ? 'tomorrow' : start.toLocaleDateString('en-US', { weekday: 'long' });
 
   const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
+  const endTime = displayEnd.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
 
   return `${dayStr} ${startTime}–${endTime}`;
 }
