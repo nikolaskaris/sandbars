@@ -180,17 +180,22 @@ function findBestWindow(
 
   if (validWindows.length === 0) return null;
 
-  // Pick the best window (highest peak, earliest as tiebreaker)
+  // Pick the best raw window (highest peak, earliest as tiebreaker)
   const best = validWindows.sort((a, b) => b.peakScore - a.peakScore || a.start - b.start)[0];
 
-  // Build recommendation from best window
-  const windowHours = hours.slice(best.start, best.end + 1).map((h) => ({
+  // Score all hours in the window
+  const allWindowHours = hours.slice(best.start, best.end + 1).map((h) => ({
     ...h,
     quality: computeQuality(h, spotMeta),
   }));
 
-  const peakHour = windowHours.reduce((a, b) => (a.quality.score > b.quality.score ? a : b));
-  const count = best.end - best.start + 1;
+  // Narrow to the PEAK sub-window: find the best contiguous ~3-6hr block
+  // within the larger window. This gives surfers a specific actionable window
+  // instead of a 16-hour block.
+  const narrowed = narrowToPeakWindow(allWindowHours, scores.slice(best.start, best.end + 1));
+
+  const peakHour = narrowed.reduce((a, b) => (a.quality.score > b.quality.score ? a : b));
+  const count = narrowed.length;
 
   // Summarize conditions at peak hour
   const peakSwell = peakHour.waves.swells[0];
@@ -200,31 +205,65 @@ function findBestWindow(
 
   let windDesc: string;
   if (peakHour.wind.speed < 1.5) windDesc = 'glass';
-  else if (peakHour.wind.speed < 3) windDesc = 'light';
-  else if (windAngle < 60) windDesc = 'offshore';
-  else if (windAngle < 120) windDesc = 'cross-shore';
-  else windDesc = 'onshore';
+  else if (peakHour.wind.speed < 3) windDesc = 'light wind';
+  else if (windAngle < 60) windDesc = 'offshore wind';
+  else if (windAngle < 120) windDesc = 'cross-shore wind';
+  else windDesc = 'onshore wind';
 
-  const heights = windowHours.map((h) => h.waves.height);
+  const heights = narrowed.map((h) => h.waves.height);
+
+  // Tide description at the peak hour — specific, not vague
+  let tideDesc = '';
+  if (peakHour.tide) {
+    tideDesc = `${peakHour.tide.state} tide`;
+  }
 
   return {
     spot: fav,
     spotMeta,
-    bestHours: windowHours,
+    bestHours: narrowed,
     peakScore: best.peakScore,
-    avgScore: best.sumScore / count,
-    startTime: scores[best.start].time,
-    endTime: scores[best.end].time,
+    avgScore: narrowed.reduce((s, h) => s + h.quality.score, 0) / count,
+    startTime: new Date(narrowed[0].validTime),
+    endTime: new Date(narrowed[narrowed.length - 1].validTime),
     summary: {
       waveHeightRange: [Math.min(...heights), Math.max(...heights)],
       period: peakSwell?.period ?? peakHour.waves.period,
       swellDir: degreesToCompass(peakSwell?.direction ?? peakHour.waves.direction),
       windSpeed: peakHour.wind.speed,
       windDesc,
-      tideState: peakHour.tide?.state ?? 'unknown',
+      tideState: tideDesc || 'unknown',
       waterTemp: peakHour.waterTemp,
     },
   };
+}
+
+/**
+ * Narrow a wide window down to the best ~2-6 hour peak block.
+ * Uses a sliding window to find the highest average-score sub-block.
+ */
+function narrowToPeakWindow<T extends { quality: { score: number }; validTime: string }>(
+  windowHours: T[],
+  _scores: Array<{ time: Date; score: number }>
+): T[] {
+  if (windowHours.length <= 3) return windowHours;
+
+  // Target window size: 2-3 forecast steps (6-9 hours at 3hr resolution)
+  const targetSize = Math.min(3, windowHours.length);
+
+  let bestStart = 0;
+  let bestAvg = 0;
+
+  for (let i = 0; i <= windowHours.length - targetSize; i++) {
+    const slice = windowHours.slice(i, i + targetSize);
+    const avg = slice.reduce((s, h) => s + h.quality.score, 0) / targetSize;
+    if (avg > bestAvg) {
+      bestAvg = avg;
+      bestStart = i;
+    }
+  }
+
+  return windowHours.slice(bestStart, bestStart + targetSize);
 }
 
 // =============================================================================
@@ -246,8 +285,8 @@ export function formatRecommendation(
   const parts = [
     `${heightStr}`,
     `${s.period}s ${s.swellDir} swell`,
-    s.windDesc !== 'glass' && s.windDesc !== 'light' ? s.windDesc : null,
-    s.tideState !== 'unknown' ? `${s.tideState} tide` : null,
+    s.windDesc !== 'glass' && s.windDesc !== 'light wind' ? s.windDesc : null,
+    s.tideState && s.tideState !== 'unknown' ? s.tideState : null,
   ].filter(Boolean);
 
   return parts.join(', ') + '.';
