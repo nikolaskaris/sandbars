@@ -760,28 +760,17 @@ export default function WaveMap({ onFavoritesChange, initialSpot, onClearInitial
         paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 },
       }, insertBefore);
 
-      // Land mask — NE 50m land polygons, covers raster over land
+      // Land mask — NE 10m land polygons (simplified to 2.7MB)
+      // Covers raster over all land including bays, harbors, and estuaries
       m.addSource('land-mask', {
         type: 'geojson',
-        data: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_land.geojson',
+        data: '/data/ne_10m_land.geojson',
       });
       m.addLayer({
         id: 'land-mask-layer',
         type: 'fill',
         source: 'land-mask',
         paint: { 'fill-color': '#F0EBE3', 'fill-opacity': 1 },
-      }, insertBefore);
-
-      // Inland water — NE 50m lakes, renders above land mask
-      m.addSource('inland-water', {
-        type: 'geojson',
-        data: 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_lakes.geojson',
-      });
-      m.addLayer({
-        id: 'inland-water-layer',
-        type: 'fill',
-        source: 'inland-water',
-        paint: { 'fill-color': '#D8E0E4', 'fill-opacity': 1 },
       }, insertBefore);
 
       // --- Terrain hillshade (always on, covers land + ocean floor) ---
