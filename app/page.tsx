@@ -59,7 +59,14 @@ export default function HomePage() {
     <>
       <NavBar
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={(view) => {
+          // Toggle overlay panels: clicking the active panel closes it back to map
+          if (view === activeView && (view === 'layers' || view === 'favorites')) {
+            setActiveView('map');
+          } else {
+            setActiveView(view);
+          }
+        }}
         favoritesCount={favoritesCount}
       />
 
