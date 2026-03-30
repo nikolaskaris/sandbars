@@ -58,6 +58,35 @@ const POPUP_STYLES = {
   noData: 'color: #B5ADA4;',
 };
 
+/**
+ * Convert legend unit label and tick values based on user preferences.
+ * The layer-colors.ts stores native units (m, m/s, °C) — this converts for display.
+ */
+function getLegendDisplay(layer: MapLayer, prefs: UserPreferences): { unit: string; ticks: string[] } {
+  const config = LAYER_COLORS[layer];
+
+  switch (layer) {
+    case 'waveHeight':
+      return {
+        unit: prefs.waveUnit,
+        ticks: config.ticks.map((t) => String(convertWaveHeight(parseFloat(t), prefs.waveUnit))),
+      };
+    case 'wind':
+      return {
+        unit: prefs.windUnit,
+        ticks: config.ticks.map((t) => String(Math.round(convertWindSpeed(parseFloat(t), prefs.windUnit)))),
+      };
+    case 'sst':
+    case 'airTemp':
+      return {
+        unit: tempUnitLabel(prefs.tempUnit),
+        ticks: config.ticks.map((t) => String(convertTemp(parseFloat(t), prefs.tempUnit))),
+      };
+    default:
+      return { unit: config.unit, ticks: config.ticks };
+  }
+}
+
 // Buoy marker colors
 const BUOY_FILL = '#FEFDFB';
 const BUOY_STROKE = '#3D3630';
@@ -1175,7 +1204,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, onClearInitial
           letterSpacing: '0.05em',
           fontVariantNumeric: 'tabular-nums',
         }}>
-          {LAYER_COLORS[activeLayer].unit}
+          {getLegendDisplay(activeLayer, prefs).unit}
         </span>
         <div style={{ display: 'flex', gap: 3 }}>
           <div
@@ -1197,7 +1226,7 @@ export default function WaveMap({ onFavoritesChange, initialSpot, onClearInitial
             height: 140,
             padding: '1px 0',
           }}>
-            {LAYER_COLORS[activeLayer].ticks.map((label, i) => (
+            {getLegendDisplay(activeLayer, prefs).ticks.map((label, i) => (
               <span key={i} style={{
                 fontSize: 9,
                 color: 'rgba(255,255,255,0.6)',
