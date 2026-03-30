@@ -9,9 +9,9 @@ import { FORECAST_HOURS, degreesToCompass } from '@/lib/wave-utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { favoritesService } from '@/lib/favorites-service';
 import { TideAtPoint } from '@/lib/tides';
-import { getFullForecast, ForecastAtPoint, ForecastSummary } from '@/lib/forecast';
+import { getFullForecast, ForecastAtPoint } from '@/lib/forecast';
 import { findNearbySpots, findNearestSpot, Spot } from '@/lib/spots';
-import { computeQuality, scoreToBorderClass, scoreColor, type QualityScore } from '@/lib/quality';
+import { computeQuality, scoreToBorderClass, scoreColor } from '@/lib/quality';
 import { generateSummary } from '@/lib/summary';
 import QualitySparkline from './QualitySparkline';
 import Button from './ui/Button';
@@ -88,12 +88,7 @@ const TIDE_STATE_ARROW: Record<string, string> = {
   low: '⬇',
 };
 
-const TIDE_STATE_LABEL: Record<string, string> = {
-  rising: 'Rising',
-  falling: 'Falling',
-  high: 'High',
-  low: 'Low',
-};
+// TIDE_STATE_LABEL removed — tide header now shows high/low times instead
 
 function TideSparkline({
   curve,
@@ -149,11 +144,11 @@ function TideSparkline({
     }
   }
 
-  // Hour labels at 6hr intervals
+  // Hour labels at 3hr intervals
   const hourLabels: Array<{ x: number; label: string }> = [];
   for (let i = 0; i < curve.length; i++) {
     const t = curve[i].time;
-    if (t.getMinutes() === 0 && t.getHours() % 6 === 0) {
+    if (t.getMinutes() === 0 && t.getHours() % 3 === 0) {
       hourLabels.push({
         x: toX(t.getTime()),
         label: t.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }),
@@ -161,8 +156,33 @@ function TideSparkline({
     }
   }
 
+  // Find local high and low points for labels
+  const extremes: Array<{ x: number; y: number; label: string; isHigh: boolean }> = [];
+  for (let i = 1; i < curve.length - 1; i++) {
+    const prev = curve[i - 1].height;
+    const curr = curve[i].height;
+    const next = curve[i + 1].height;
+    if (curr > prev && curr > next) {
+      const t = curve[i].time;
+      extremes.push({
+        x: toX(t.getTime()),
+        y: toY(curr),
+        label: `H ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`,
+        isHigh: true,
+      });
+    } else if (curr < prev && curr < next) {
+      const t = curve[i].time;
+      extremes.push({
+        x: toX(t.getTime()),
+        y: toY(curr),
+        label: `L ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`,
+        isHigh: false,
+      });
+    }
+  }
+
   return (
-    <svg width={width} height={height + 14} className="block">
+    <svg width={width} height={height + 18} className="block">
       {/* Zero line */}
       {minH < 0 && maxH > 0 && (
         <line
@@ -177,6 +197,20 @@ function TideSparkline({
       )}
       {/* Tide curve */}
       <path d={pathD} fill="none" stroke="#B8704C" strokeWidth={1.5} opacity={0.8} />
+      {/* High/Low point labels */}
+      {extremes.map((ex, i) => (
+        <text
+          key={`ex-${i}`}
+          x={ex.x}
+          y={ex.isHigh ? ex.y - 5 : ex.y + 12}
+          textAnchor="middle"
+          fontSize={10}
+          fontWeight={600}
+          fill="#2C2825"
+        >
+          {ex.label}
+        </text>
+      ))}
       {/* Now marker */}
       {nowInRange && (
         <>
@@ -197,10 +231,10 @@ function TideSparkline({
         <text
           key={i}
           x={hl.x}
-          y={height + 11}
+          y={height + 14}
           textAnchor="middle"
-          fontSize={9}
-          fill="#B5ADA4"
+          fontSize={10}
+          fill="#8C8279"
         >
           {hl.label}
         </text>
@@ -486,17 +520,14 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
             )}
           </div>
           {(currentTide || waterTemp != null || airTemp != null) && (
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-text-tertiary flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1.5 text-sm text-text-tertiary flex-wrap">
               {currentTide && (
                 <>
-                  <span className="text-text-secondary font-medium tabular-nums">
-                    {convertWaveHeight(currentTide.height, prefs.waveUnit).toFixed(1)}{prefs.waveUnit}
-                  </span>
-                  <span>{TIDE_STATE_ARROW[currentTide.state]} {TIDE_STATE_LABEL[currentTide.state]}</span>
+                  {currentTide.nextLow && (
+                    <span>Low {currentTide.nextLow.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                  )}
                   {currentTide.nextHigh && (
-                    <span>
-                      · High {currentTide.nextHigh.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                    </span>
+                    <span>· High {currentTide.nextHigh.time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                   )}
                 </>
               )}
@@ -596,12 +627,12 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
 
       {/* Tide sparkline */}
       {!location.isLand && tideCurve && tideCurve.length > 2 && (
-        <div className="px-5 py-2 border-b border-border shrink-0">
+        <div className="px-5 py-3 border-b border-border shrink-0">
           <TideSparkline
             curve={tideCurve}
             nowMs={Date.now()}
             width={isMobile ? 300 : 380}
-            height={45}
+            height={60}
           />
         </div>
       )}
@@ -609,7 +640,7 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
       {/* Natural language summary */}
       {!location.isLand && !loading && currentSummary && (
         <div className="px-5 py-3 border-b border-border shrink-0">
-          <p className="text-xs text-text-secondary leading-relaxed">{currentSummary}</p>
+          <p className="text-sm text-text-secondary leading-relaxed">{currentSummary}</p>
         </div>
       )}
 
@@ -624,15 +655,15 @@ export default function SpotPanel({ location, onClose, onFavoritesChange, onSele
                   style={{ backgroundColor: scoreColor(dq.score) }}
                   title={`${dq.date}: ${dq.score.toFixed(1)}`}
                 />
-                <div className="text-[9px] text-text-tertiary tabular-nums leading-none">
-                  {convertWaveHeight(dq.heightRange[0], prefs.waveUnit)}-{convertWaveHeight(dq.heightRange[1], prefs.waveUnit)}
+                <div className="text-[10px] text-text-tertiary tabular-nums leading-none">
+                  {convertWaveHeight(dq.heightRange[0], prefs.waveUnit)}-{convertWaveHeight(dq.heightRange[1], prefs.waveUnit)}{prefs.waveUnit}
                 </div>
               </div>
             ))}
           </div>
           <div className="flex items-center gap-1">
             {dayQualities.slice(0, 7).map((dq, i) => (
-              <div key={i} className="flex-1 text-center text-[8px] text-text-tertiary">
+              <div key={i} className="flex-1 text-center text-[10px] text-text-tertiary">
                 {dq.date.slice(0, 3)}
               </div>
             ))}

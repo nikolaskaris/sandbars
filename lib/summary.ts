@@ -30,13 +30,17 @@ export function generateSummary(
 ): string {
   const parts: string[] = [];
 
-  // === Raw conditions ===
-  const heightStr = `${convertWaveHeight(forecast.waves.height, opts.waveUnit)}${opts.waveUnit}`;
+  // === Raw conditions — lead with primary swell, then combined height ===
   const primarySwell = forecast.waves.swells[0];
-  const periodStr = primarySwell ? `${primarySwell.period}s` : `${forecast.waves.period}s`;
-  const dirStr = degreesToCompass(primarySwell?.direction ?? forecast.waves.direction);
+  const combinedHeight = `${convertWaveHeight(forecast.waves.height, opts.waveUnit)}${opts.waveUnit}`;
 
-  parts.push(`${heightStr} at ${periodStr} from the ${dirStr}.`);
+  if (primarySwell) {
+    const swellHeight = `${convertWaveHeight(primarySwell.height, opts.waveUnit)}${opts.waveUnit}`;
+    const dirStr = degreesToCompass(primarySwell.direction);
+    parts.push(`Primary swell ${swellHeight} at ${primarySwell.period}s from the ${dirStr} (${combinedHeight} combined).`);
+  } else {
+    parts.push(`${combinedHeight} at ${forecast.waves.period}s.`);
+  }
 
   // Wind
   const windSpeedStr = `${convertWindSpeed(forecast.wind.speed, opts.windUnit)} ${opts.windUnit}`;
@@ -57,10 +61,9 @@ export function generateSummary(
     parts.push(`Wind is ${windQualifier ? windQualifier + ' at ' : ''}${windSpeedStr} ${windDirStr}.`);
   }
 
-  // Tide
+  // Tide — describe state, not raw height
   if (forecast.tide) {
-    const tideHStr = `${convertWaveHeight(forecast.tide.height, opts.waveUnit).toFixed(1)}${opts.waveUnit}`;
-    parts.push(`Tide is ${tideHStr} and ${forecast.tide.state}.`);
+    parts.push(`Tide is ${forecast.tide.state}.`);
   }
 
   // Temperature
